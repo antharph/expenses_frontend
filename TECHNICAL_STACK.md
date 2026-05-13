@@ -7,6 +7,7 @@ This document records the **intended** languages, frameworks, and services for t
 | Area | Choice |
 |------|--------|
 | **Framework** | [Flutter](https://flutter.dev/) |
+| **Target platforms** | **iOS** and **Android** (single codebase; platform-specific setup where Firebase, signing, or networking require it) |
 | **Language** | Dart (see `pubspec.yaml` → `environment.sdk` for the supported range) |
 | **UI system** | [Material Design 3](https://m3.material.io/) (Material 3 widgets and theming in Flutter) |
 | **State management** | [Riverpod](https://riverpod.dev/) (`flutter_riverpod`; optional `riverpod_annotation` + `riverpod_generator` for codegen) |
@@ -49,6 +50,27 @@ Until FVM is committed to the repo, document the chosen Flutter version here or 
 - Central **API base URL**, timeouts, interceptors (auth header, logging in debug), and typed repositories or data sources.
 - **Receipt images:** `multipart/form-data` or the format required by the API; handle size limits and permission UX on the device.
 
+### Configuration (.env)
+
+- **Local and non-secret settings** (API endpoints, host hints for TLS/SNI or logging) live in a **`.env`** file at the project root, loaded at app startup (typically via a package such as `flutter_dotenv`, with `.env` listed under `flutter.assets` in `pubspec.yaml`).
+- **Do not commit** machine-specific `.env` files if they embed LAN IPs or personal hostnames; commit a **`.env.example`** with the same keys and placeholder values instead.
+- **Defined keys** (names are stable; values are environment-specific):
+
+| Key | Purpose |
+|-----|---------|
+| `API_URL` | Base URL for HTTP calls to the backend (scheme, host, port, no trailing slash unless your client code expects it). |
+| `API_HOST` | Hostname associated with the API (e.g. for virtual hosts, certificate validation, or `Host` header behavior if your stack uses it). |
+
+- **Example (iOS, physical device on a LAN)** — the device must reach a **routable IP** on your network; this is **not** necessarily correct for the **iOS Simulator** (simulator often uses `localhost` / `127.0.0.1` or your Mac’s loopback depending on where the API listens):
+
+  ```env
+  API_URL=http://192.168.0.39:8083
+  API_HOST=expenses.local
+  ```
+
+- **iOS Simulator:** often differs from a physical device (e.g. API bound to `127.0.0.1` on the Mac vs. a LAN IP). Adjust `API_URL` (and if needed `API_HOST`) so the simulator’s network view can reach the server.
+- **Android:** emulator vs. physical device also differs (e.g. Android Emulator’s special alias **`10.0.2.2`** to reach the host machine’s `localhost`). Use an `API_URL` (and `API_HOST` if applicable) that matches **that** runtime, not necessarily the iOS LAN example above.
+
 ## Tooling and quality
 
 | Tool | Role |
@@ -64,7 +86,7 @@ The following are **common** companions; versions belong in `pubspec.yaml`, not 
 - **HTTP:** `dio` or `http`, plus small API/repository layer.
 - **Serialization:** `freezed`, `json_serializable`, `build_runner` if you adopt immutable DTOs.
 - **Routing:** `go_router` when navigation grows beyond a few routes.
-- **Environment:** `flutter_dotenv` or `--dart-define` for non-secret config (API base URL per flavor).
+- **Environment:** primary contract is a **`.env`** file (see [Configuration (.env)](#configuration-env)); `flutter_dotenv` (or equivalent) is the usual loader. **`--dart-define`** remains an option for CI or flavors when you do not ship a bundled `.env`.
 
 ## Related docs
 

@@ -1,0 +1,61 @@
+# Dart / Pub — tooling cache and package store (if present under project)
+.dart_tool/
+.pub/
+.pub-cache/
+
+# Flutter build output (project root and nested)
+build/
+**/build/
+
+# Tests / docs output
+coverage/
+**/doc/api/
+
+# Android — Gradle caches and local machine paths
+android/.gradle/
+android/**/.cxx/
+android/captures/
+android/**/local.properties
+android/app/debug/
+android/app/profile/
+android/app/release/
+
+# iOS / macOS — CocoaPods, Flutter ephemerals, Xcode noise
+**/Pods/
+**/.symlinks/
+**/DerivedData/
+**/xcuserdata/
+**/*.xcuserstate
+ios/Flutter/ephemeral/
+ios/Flutter/App.framework/
+ios/Flutter/Flutter.framework/
+ios/Flutter/flutter_assets/
+macos/Flutter/ephemeral/
+
+# Desktop / Web — Flutter-generated ephemeral dirs
+linux/flutter/ephemeral/
+windows/flutter/ephemeral/
+
+# IDE / OS clutter
+.idea/
+*.iml
+*.ipr
+*.iws
+.DS_Store
+.atom/
+.history/
+.svn/
+.swiftpm/
+
+# Logs and temp editor files
+*.log
+*.class
+*.pyc
+*.swp
+.build/
+.buildlog/
+migrate_working_dir/
+
+# Symbolication / obfuscation artifacts (release builds)
+app.*.symbols
+app.*.map.json
