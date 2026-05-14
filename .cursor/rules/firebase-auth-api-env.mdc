@@ -1,0 +1,27 @@
+---
+description: Firebase Google auth, HTTP API layer, and .env configuration (from TECHNICAL_STACK.md)
+globs: lib/**/*.dart
+alwaysApply: false
+---
+
+# Authentication (Firebase + Google)
+
+- Use **Firebase** for identity with **Google** sign-in: `firebase_core`, `firebase_auth`, and platform integration per current Firebase Flutter docs (often includes `google_sign_in` where required).
+- Platform config: `GoogleService-Info.plist` (iOS), `google-services.json` (Android), web OAuth as documented—**do not commit** secrets meant for CI or local-only config.
+- After Firebase session is valid, attach the **ID token or session contract** the backend expects on **every HTTP call** (see `AGENTS.md`).
+
+# Data and networking
+
+- **Authoritative data** comes from the **HTTP API** (REST or documented HTTP): expenses, chat actions, listings, totals—not a parallel local source of truth unless offline-first is explicitly added.
+- Centralize **base URL**, timeouts, interceptors (auth header, debug logging), and map responses in **typed repositories** or data sources.
+- **Receipt uploads:** use **`multipart/form-data`** or the format the API specifies; respect size limits and permissions UX.
+
+# `.env` configuration
+
+- Load **`.env`** at startup (e.g. `flutter_dotenv` with `.env` under `flutter.assets` in `pubspec.yaml`). Commit **`.env.example`** with the same keys and placeholders; avoid committing machine-specific values (LAN IPs, personal hostnames).
+- **Stable keys:** `API_URL` (base URL, typically no trailing slash unless client code expects it), `API_HOST` (hostname for vhost/SNI/`Host` header if the stack needs it).
+- **Runtime networking:** iOS Simulator vs physical device, and Android emulator (**`10.0.2.2`** for host `localhost`) often need **different** `API_URL` / `API_HOST` than a LAN IP—match the target runtime. **`--dart-define`** is fine for CI or flavors when not bundling `.env`.
+
+# Optional stack (add in `pubspec.yaml` when adopted)
+
+- HTTP: `dio` or `http` behind repositories; serialization: `freezed` / `json_serializable` / `build_runner`; routing: `go_router` when routes grow.

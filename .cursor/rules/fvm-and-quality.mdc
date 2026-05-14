@@ -1,0 +1,19 @@
+---
+description: FVM for Flutter/Dart CLI and project quality commands (from TECHNICAL_STACK.md)
+alwaysApply: true
+---
+
+# FVM and quality tooling
+
+This project pins Flutter via **FVM** (see `TECHNICAL_STACK.md`). Prefer **`fvm flutter …`** and **`fvm dart …`** for CLI work so the SDK matches CI and other developers.
+
+- Dependencies: `fvm flutter pub get`
+- Static analysis: `fvm flutter analyze` (respect `analysis_options.yaml` / `flutter_lints`)
+- Format: `fvm dart format .` (or targeted paths)
+- Tests: `fvm flutter test`
+
+For CI, align with the same `fvm` invocations. Do not assume a global `flutter` on PATH unless the user explicitly opts out.
+
+# Shipping targets
+
+Ship as a **single Flutter codebase** for **iOS** and **Android**; keep platform-specific code to what Firebase, signing, or networking actually require.

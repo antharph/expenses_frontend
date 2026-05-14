@@ -1,0 +1,18 @@
+---
+description: Material Design 3 UI and Riverpod state (from TECHNICAL_STACK.md)
+globs: lib/**/*.dart
+alwaysApply: false
+---
+
+# Material Design 3
+
+- Use **Material 3**: e.g. `ThemeData(useMaterial3: true)` on `MaterialApp` when defining the app theme.
+- Prefer **M3-aligned** widgets and theming: `ColorScheme`, navigation components, chips, cards, and `TextTheme` roles—not ad hoc Material 2-only layouts unless intentionally excepted.
+- Derive **spacing, motion, and elevation** from the active theme instead of one-off legacy M2 patterns.
+
+# Riverpod
+
+- Root the app with **`ProviderScope`**; expose session and feature state through providers.
+- Use **`AsyncValue`** for async flows (API, auth transitions) and surface loading/error in UI.
+- Keep **side effects** (sign-in, HTTP writes) in notifiers or services invoked from providers—not inside `build`.
+- Optional codegen: **`@riverpod`** + `riverpod_generator`; after changes run `dart run build_runner build --delete-conflicting-outputs` (via FVM: `fvm dart run …`).

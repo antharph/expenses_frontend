@@ -1,0 +1,17 @@
+---
+description: Use the project’s default iOS simulator/device when running or debugging Flutter on iOS
+alwaysApply: true
+---
+
+# iOS debug target
+
+When **running or debugging this Flutter app on iOS** (CLI, integrated terminal, or suggested launch commands), use this device identifier unless the user specifies another:
+
+`B1DCBFAC-002F-4017-A755-8E3C63A2C715`
+
+Examples:
+
+- `flutter run -d B1DCBFAC-002F-4017-A755-8E3C63A2C715`
+- `flutter attach -d B1DCBFAC-002F-4017-A755-8E3C63A2C715`
+
+Do not substitute a different iOS device or simulator for routine iOS debug runs unless the user asks or that device is unavailable (then state the fallback and why).

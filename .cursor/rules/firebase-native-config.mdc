@@ -1,0 +1,13 @@
+---
+description: Firebase native config on iOS/Android — align with TECHNICAL_STACK.md
+globs:
+  - ios/**/*
+  - android/**/*
+alwaysApply: false
+---
+
+# Native Firebase configuration
+
+- **iOS:** `GoogleService-Info.plist` in the Xcode project as Firebase documents.
+- **Android:** `google-services.json` per Firebase Android setup.
+- Treat these as **environment-specific** where appropriate: do not commit secrets or developer-only values that belong in CI or local setup; follow Firebase’s guidance per platform.
