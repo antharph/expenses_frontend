@@ -1,0 +1,46 @@
+---
+description: App quality pillars aligned with Google Play / Android guidelines (Flutter mapping)
+alwaysApply: true
+---
+
+# App quality (Android / Play baseline)
+
+Ground changes in [Android app quality](https://developer.android.com/docs/quality). This repo ships **Flutter for Android (and iOS)**—apply the intent below in Dart/UI, native config only when the platform requires it.
+
+## Visual experience and UX
+
+- **Material 3:** Follow `.cursor/rules/material3-and-riverpod.mdc` for M3 theming and components.
+- **State preservation:** Preserve meaningful UI state across rotation and process death where product cares: `RestorationMixin` / restoration IDs, `PageStorageKey` for scrollables, and **Riverpod** (or persisted prefs) for session-critical fields—not only ephemeral `setState`.
+- **Back navigation:** Use predictable back behavior (`PopScope` / `WillPopScope` successors, `go_router` pops). Respect Android system back and **predictive back** where enabled; avoid trapping users without an obvious exit.
+- **Touch targets:** Interactive controls should meet at least **48×48 logical pixels** (Material minimum). Use `minimumSize` on buttons, adequate padding on `InkWell`/`GestureDetector`, and theme/visual density instead of shrinking targets to fit copy.
+
+## Performance and stability
+
+- **Startup:** Defer non-critical work past first frame; avoid heavy sync work on the UI isolate during cold start. Warm paths should stay lean.
+- **Stability:** Prefer typed errors and visible failure states over silent catches. Watch for layout overflows and unawaited futures that can surface as instability.
+- **Frame rate:** Prefer `const` where possible, cheap `build` methods, and efficient lists (`ListView.builder`, etc.) so scrolling and animations stay smooth on 60 Hz+ devices.
+
+## Privacy and security
+
+- **Permissions:** Request **in context** when a feature needs them; avoid a permission burst at first launch unless required for core entry.
+- **Data minimization:** Prefer narrow scopes (e.g. photo picker flows that avoid broad gallery permission when the API allows).
+- **Network:** All production traffic over **HTTPS/TLS**; centralize the HTTP client and do not weaken certificate validation for convenience.
+
+## Adaptive layouts (phones → large screens)
+
+- Avoid **letterboxing** on tablets and large windows: use responsive breakpoints, `LayoutBuilder` / `MediaQuery`, and consider **list–detail** or **navigation rail** patterns on wide layouts (see M3 rail rule for dashboard).
+- Where relevant, ensure layouts and hit targets work with **mouse/trackpad** and keyboard focus, not only touch.
+
+## “Excellence” style checklist (when the feature exists)
+
+- **Notifications:** If adding push/local notifications, use **clear channels** on Android and meaningful categories (e.g. chat-style grouping when appropriate).
+- **Accessibility:** Meaningful **semantics** (`Semantics`, labels), focus order, and contrast in line with **WCAG-style** goals (~**4.5:1** for normal text where feasible).
+- **Deep linking:** Prefer typed routes (`go_router`) and verified **App Links** / Universal Links configuration when linking web URLs into the app.
+- **Background work:** Prefer **`workmanager`** (or platform-documented equivalents) for deferrable background tasks; avoid ad hoc long-running timers that fight Doze.
+- **Internationalization:** Support **RTL** (`Directionality`, localized layouts) and per-app locale where product requires it (`flutter_localizations`).
+
+## Play listing and releases (human + CI)
+
+- Store **metadata** should be accurate; screenshots reflect real UI.
+- **Privacy policy** must be reachable from the listing and in-app when collecting data.
+- **Target / compile SDK:** Keep Android `targetSdkVersion` within Play’s **rolling one-year** expectation when preparing releases.

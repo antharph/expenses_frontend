@@ -8,6 +8,7 @@ alwaysApply: false
 
 - Use **Material 3**: e.g. `ThemeData(useMaterial3: true)` on `MaterialApp` when defining the app theme.
 - Prefer **M3-aligned** widgets and theming: `ColorScheme`, navigation components, chips, cards, and `TextTheme` roles—not ad hoc Material 2-only layouts unless intentionally excepted.
+- **Dashboard menu:** use **Material 3 `NavigationRail`** for the Dashboard side menu (destinations, labels, and theming aligned with M3 rail guidance—not a custom drawer-only pattern unless product explicitly requires it).
 - Derive **spacing, motion, and elevation** from the active theme instead of one-off legacy M2 patterns.
 
 # Riverpod
