@@ -21,7 +21,28 @@ String formatApiError(Object error) {
         return message;
       }
     }
+
+    if (_isUnreachableHost(error)) {
+      return '${error.message ?? 'Connection failed'}\n\n'
+          'On a physical phone, 127.0.0.1 and localhost refer to the phone, not your dev machine. '
+          'Use your computer\'s LAN IP in API_URL (same Wi‑Fi), e.g. http://192.168.1.10:8080. '
+          'Ensure the API listens on all interfaces (e.g. 0.0.0.0 in Docker/Apache), not only localhost.';
+    }
+
     return error.message ?? 'Network error';
   }
   return error.toString();
+}
+
+bool _isUnreachableHost(DioException error) {
+  if (error.type == DioExceptionType.connectionError) {
+    return true;
+  }
+  final msg = error.message?.toLowerCase() ?? '';
+  if (msg.contains('connection refused') ||
+      msg.contains('failed host lookup') ||
+      msg.contains('network is unreachable')) {
+    return true;
+  }
+  return false;
 }

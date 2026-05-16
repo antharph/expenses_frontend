@@ -1,5 +1,9 @@
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 
+/// Base URL for API calls (from `.env` `API_URL`).
+///
+/// On a **physical device**, `localhost` / `127.0.0.1` is the device itself—use
+/// your dev machine's **LAN IP** and a server bound to `0.0.0.0`. See `.env.example`.
 String apiBaseUrl() {
   final raw = dotenv.env['API_URL']?.trim();
   if (raw == null || raw.isEmpty) {

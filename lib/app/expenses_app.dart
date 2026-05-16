@@ -37,12 +37,30 @@ class ExpensesApp extends ConsumerWidget {
         ),
         data: (user) {
           if (user != null) {
-            return const DashboardScreen();
+            return const _DashboardShell();
           }
           return page == AuthPage.login
               ? const LoginScreen()
               : const RegisterScreen();
         },
+      ),
+    );
+  }
+}
+
+/// Paints notch / status-bar insets with the scaffold background color so they
+/// are not black, then applies [SafeArea] around the dashboard.
+class _DashboardShell extends StatelessWidget {
+  const _DashboardShell();
+
+  @override
+  Widget build(BuildContext context) {
+    final surface = Theme.of(context).scaffoldBackgroundColor;
+
+    return ColoredBox(
+      color: surface,
+      child: const SafeArea(
+        child: DashboardScreen(),
       ),
     );
   }
