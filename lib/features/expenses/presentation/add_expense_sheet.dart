@@ -5,6 +5,7 @@ import 'package:image_picker/image_picker.dart';
 
 import '../../../core/errors/api_errors.dart';
 import '../../auth/application/session_notifier.dart';
+import '../../dashboard/application/dashboard_expense_summary_provider.dart';
 import '../application/categories_provider.dart';
 import '../application/expenses_list_notifier.dart';
 import '../data/expenses_api.dart';
@@ -70,17 +71,20 @@ class _AddExpenseSheetState extends ConsumerState<AddExpenseSheet> {
         item: hasReceipt ? null : _itemController.text.trim(),
         price: hasReceipt ? null : _priceController.text.trim(),
         receiptFilePath: receipt?.path,
-        receiptFilename: receipt != null ? _filenameFromPath(receipt.path) : null,
+        receiptFilename: receipt != null
+            ? _filenameFromPath(receipt.path)
+            : null,
         categoryId: _selectedCategoryId,
       );
       await ref.read(expensesListProvider.notifier).refresh();
+      ref.invalidate(dashboardExpenseSummaryProvider);
       if (!mounted) {
         return;
       }
       Navigator.of(context).pop();
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Expense saved.')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Expense saved.')));
     } on DioException catch (e) {
       setState(() {
         _saving = false;
@@ -155,10 +159,7 @@ class _AddExpenseSheetState extends ConsumerState<AddExpenseSheet> {
                     isExpanded: true,
                     hint: const Text('None'),
                     items: const [
-                      DropdownMenuItem<int?>(
-                        value: null,
-                        child: Text('None'),
-                      ),
+                      DropdownMenuItem<int?>(value: null, child: Text('None')),
                     ],
                     onChanged: _saving
                         ? null
@@ -188,7 +189,9 @@ class _AddExpenseSheetState extends ConsumerState<AddExpenseSheet> {
             const SizedBox(height: 12),
             TextFormField(
               controller: _priceController,
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              keyboardType: const TextInputType.numberWithOptions(
+                decimal: true,
+              ),
               decoration: const InputDecoration(
                 labelText: 'Price',
                 border: OutlineInputBorder(),
@@ -218,7 +221,11 @@ class _AddExpenseSheetState extends ConsumerState<AddExpenseSheet> {
             OutlinedButton.icon(
               onPressed: _saving ? null : _pickImage,
               icon: const Icon(Icons.image_outlined),
-              label: Text(_receipt == null ? 'Upload receipt (optional)' : 'Change receipt'),
+              label: Text(
+                _receipt == null
+                    ? 'Upload receipt (optional)'
+                    : 'Change receipt',
+              ),
             ),
             if (_receipt != null) ...[
               const SizedBox(height: 8),
@@ -229,7 +236,10 @@ class _AddExpenseSheetState extends ConsumerState<AddExpenseSheet> {
             ],
             if (_error != null) ...[
               const SizedBox(height: 12),
-              Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
+              Text(
+                _error!,
+                style: TextStyle(color: Theme.of(context).colorScheme.error),
+              ),
             ],
             const SizedBox(height: 20),
             FilledButton(

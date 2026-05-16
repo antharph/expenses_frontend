@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_slidable/flutter_slidable.dart';
 
+import '../../dashboard/application/dashboard_expense_summary_provider.dart';
 import '../application/expenses_list_notifier.dart';
 import '../domain/expense.dart';
 import 'add_expense_sheet.dart';
@@ -64,7 +65,9 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen> {
     ref.listen<ExpensesListState>(expensesListProvider, (previous, next) {
       final msg = next.initialError;
       if (msg != null && msg.isNotEmpty && msg != previous?.initialError) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(msg)));
       }
     });
 
@@ -85,49 +88,51 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen> {
       body: list.isLoadingInitial && list.items.isEmpty
           ? const Center(child: CircularProgressIndicator())
           : list.items.isEmpty && list.initialError != null
-              ? Center(
-                  child: Padding(
-                    padding: const EdgeInsets.all(24),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(list.initialError!, textAlign: TextAlign.center),
-                        const SizedBox(height: 16),
-                        FilledButton(
-                          onPressed: () => ref.read(expensesListProvider.notifier).loadInitial(),
-                          child: const Text('Retry'),
-                        ),
-                      ],
+          ? Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(list.initialError!, textAlign: TextAlign.center),
+                    const SizedBox(height: 16),
+                    FilledButton(
+                      onPressed: () =>
+                          ref.read(expensesListProvider.notifier).loadInitial(),
+                      child: const Text('Retry'),
                     ),
-                  ),
-                )
-              : RefreshIndicator(
-                  onRefresh: () => ref.read(expensesListProvider.notifier).refresh(),
-                  child: SlidableAutoCloseBehavior(
-                    child: ListView.builder(
-                      controller: _scrollController,
-                      physics: const AlwaysScrollableScrollPhysics(),
-                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 88),
-                      itemCount: list.items.length + (list.hasMore ? 1 : 0),
-                      itemBuilder: (context, index) {
-                        if (index >= list.items.length) {
-                          return Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 16),
-                            child: Center(
-                              child: list.isLoadingMore
-                                  ? const CircularProgressIndicator()
-                                  : const SizedBox.shrink(),
-                            ),
-                          );
-                        }
-                        return _ExpenseRow(
-                          expense: list.items[index],
-                          formatDate: _formatDate,
-                        );
-                      },
-                    ),
-                  ),
+                  ],
                 ),
+              ),
+            )
+          : RefreshIndicator(
+              onRefresh: () =>
+                  ref.read(expensesListProvider.notifier).refresh(),
+              child: SlidableAutoCloseBehavior(
+                child: ListView.builder(
+                  controller: _scrollController,
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 88),
+                  itemCount: list.items.length + (list.hasMore ? 1 : 0),
+                  itemBuilder: (context, index) {
+                    if (index >= list.items.length) {
+                      return Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        child: Center(
+                          child: list.isLoadingMore
+                              ? const CircularProgressIndicator()
+                              : const SizedBox.shrink(),
+                        ),
+                      );
+                    }
+                    return _ExpenseRow(
+                      expense: list.items[index],
+                      formatDate: _formatDate,
+                    );
+                  },
+                ),
+              ),
+            ),
     );
   }
 }
@@ -160,13 +165,17 @@ class _ExpenseRow extends ConsumerWidget {
       return;
     }
 
-    final err = await ref.read(expensesListProvider.notifier).deleteExpense(expense.id);
+    final err = await ref
+        .read(expensesListProvider.notifier)
+        .deleteExpense(expense.id);
     if (!context.mounted) {
       return;
     }
     if (err != null) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(err)));
+      return;
     }
+    ref.invalidate(dashboardExpenseSummaryProvider);
   }
 
   @override
@@ -189,10 +198,7 @@ class _ExpenseRow extends ConsumerWidget {
             ),
             Expanded(
               flex: 3,
-              child: Text(
-                expense.item,
-                style: theme.textTheme.titleSmall,
-              ),
+              child: Text(expense.item, style: theme.textTheme.titleSmall),
             ),
             Expanded(
               flex: 2,
