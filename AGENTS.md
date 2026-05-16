@@ -1,6 +1,8 @@
 # AGENTS.md — Expenses Frontend
 
-Guidance for AI assistants and contributors working on this repository. Treat this project as a **production-quality Flutter client**: clear architecture, predictable state, and safe network usage.
+Act as a Senior Flutter Developer and Senior UI/UX Developer.
+
+Treat this project as a **production-quality Flutter client**: clear architecture, predictable state, and safe network usage.
 
 ## Product overview
 
