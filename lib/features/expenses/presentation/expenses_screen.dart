@@ -112,7 +112,13 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen> {
                 child: ListView.builder(
                   controller: _scrollController,
                   physics: const AlwaysScrollableScrollPhysics(),
-                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 88),
+                  padding: EdgeInsets.fromLTRB(
+                    16,
+                    8,
+                    16,
+                    // Extended FAB + margin + safe inset so the last row clears the button.
+                    MediaQuery.paddingOf(context).bottom + 112,
+                  ),
                   itemCount: list.items.length + (list.hasMore ? 1 : 0),
                   itemBuilder: (context, index) {
                     if (index >= list.items.length) {
@@ -142,6 +148,10 @@ class _ExpenseRow extends ConsumerWidget {
 
   final Expense expense;
   final String Function(String iso) formatDate;
+
+  static const double _cardRadius = 12;
+  static const double _dateColumnWidth = 96;
+  static const double _amountColumnWidth = 108;
 
   Future<void> _confirmDelete(BuildContext context, WidgetRef ref) async {
     final confirmed = await showDialog<bool>(
@@ -181,33 +191,59 @@ class _ExpenseRow extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final cardColor = theme.brightness == Brightness.light
+        ? const Color(0xFFF9FAFB)
+        : scheme.surfaceContainerHighest.withValues(alpha: 0.55);
 
-    final card = Card(
-      margin: EdgeInsets.zero,
+    final amountStyle = theme.textTheme.titleSmall?.copyWith(
+      fontWeight: FontWeight.w600,
+      fontFeatures: const [FontFeature.tabularFigures()],
+    );
+
+    final row = Material(
+      color: cardColor,
+      elevation: 0,
+      shadowColor: Colors.transparent,
+      surfaceTintColor: Colors.transparent,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(_cardRadius),
+        side: BorderSide(color: scheme.outlineVariant.withValues(alpha: 0.4)),
+      ),
+      clipBehavior: Clip.antiAlias,
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            Expanded(
-              flex: 2,
+            SizedBox(
+              width: _dateColumnWidth,
               child: Text(
                 formatDate(expense.dateIso),
-                style: theme.textTheme.bodyMedium,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: scheme.onSurfaceVariant,
+                ),
               ),
             ),
             Expanded(
-              flex: 3,
-              child: Text(expense.item, style: theme.textTheme.titleSmall),
+              child: Text(
+                expense.item,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.titleSmall,
+              ),
             ),
-            Expanded(
-              flex: 2,
+            const SizedBox(width: 12),
+            SizedBox(
+              width: _amountColumnWidth,
               child: Text(
                 expense.price,
-                textAlign: TextAlign.end,
-                style: theme.textTheme.titleSmall?.copyWith(
-                  fontWeight: FontWeight.w600,
-                ),
+                textAlign: TextAlign.right,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: amountStyle,
               ),
             ),
           ],
@@ -216,27 +252,42 @@ class _ExpenseRow extends ConsumerWidget {
     );
 
     return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Slidable(
-        key: ValueKey<int>(expense.id),
-        groupTag: 'expenses_list',
-        endActionPane: ActionPane(
-          extentRatio: 0.26,
-          motion: const BehindMotion(),
-          dragDismissible: false,
-          children: [
-            SlidableAction(
-              onPressed: (_) => _confirmDelete(context, ref),
-              backgroundColor: theme.colorScheme.error,
-              foregroundColor: theme.colorScheme.onError,
-              icon: Icons.delete_outline,
-              label: 'Delete',
-              flex: 1,
-              padding: EdgeInsets.zero,
-            ),
-          ],
+      padding: const EdgeInsets.only(bottom: 10),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(_cardRadius),
+        clipBehavior: Clip.hardEdge,
+        child: Slidable(
+          key: ValueKey<int>(expense.id),
+          groupTag: 'expenses_list',
+          endActionPane: ActionPane(
+            extentRatio: 0.28,
+            motion: const BehindMotion(),
+            dragDismissible: false,
+            children: [
+              CustomSlidableAction(
+                onPressed: (_) => _confirmDelete(context, ref),
+                backgroundColor: scheme.error,
+                foregroundColor: scheme.onError,
+                padding: EdgeInsets.zero,
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.delete_outline, color: scheme.onError, size: 22),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Delete',
+                      style: theme.textTheme.labelMedium?.copyWith(
+                        color: scheme.onError,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          child: row,
         ),
-        child: card,
       ),
     );
   }

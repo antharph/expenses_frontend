@@ -14,22 +14,29 @@ import '../expenses/presentation/expenses_screen.dart';
 double _niceChartCeiling(double dataMax, {double headroom = 1.08}) {
   if (dataMax <= 0) return 1;
   final raw = dataMax * headroom;
-  final exponent =
-      math.pow(10.0, (math.log(raw) / math.ln10).floor()).toDouble();
+  final exponent = math
+      .pow(10.0, (math.log(raw) / math.ln10).floor())
+      .toDouble();
   final n = raw / exponent;
-  final niceFrac = n <= 1 ? 1.0 : n <= 2 ? 2.0 : n <= 5 ? 5.0 : 10.0;
+  final niceFrac = n <= 1
+      ? 1.0
+      : n <= 2
+      ? 2.0
+      : n <= 5
+      ? 5.0
+      : 10.0;
   return niceFrac * exponent;
 }
 
 String _axisMoneyLabel(double value) {
   if (value.abs() < 1e-6) {
-    return r'$0';
+    return r'0';
   }
   final isIntegerLike = value == value.roundToDouble();
   if (isIntegerLike) {
-    return NumberFormat.currency(symbol: r'$', decimalDigits: 0).format(value);
+    return NumberFormat.currency(symbol: r'', decimalDigits: 0).format(value);
   }
-  return NumberFormat.currency(symbol: r'$', decimalDigits: 1).format(value);
+  return NumberFormat.currency(symbol: r'', decimalDigits: 0).format(value);
 }
 
 class DashboardScreen extends ConsumerStatefulWidget {
@@ -91,9 +98,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
             child: GestureDetector(
               behavior: HitTestBehavior.opaque,
               onTap: () => setState(() => _railExpanded = false),
-              child: ColoredBox(
-                color: Colors.black.withValues(alpha: 0.12),
-              ),
+              child: ColoredBox(color: Colors.black.withValues(alpha: 0.12)),
             ),
           ),
         ],
@@ -132,6 +137,10 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
                         NavigationRail(
+                          backgroundColor: Theme.of(context)
+                              .colorScheme
+                              .surfaceContainerLow
+                              .withValues(alpha: 0.82),
                           selectedIndex: _railIndex,
                           onDestinationSelected: (index) {
                             if (index == 2) {
@@ -168,7 +177,6 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                             ),
                           ],
                         ),
-                        const VerticalDivider(width: 1, thickness: 1),
                       ],
                     )
                   : Row(
@@ -176,7 +184,10 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
                         Material(
-                          color: Theme.of(context).colorScheme.surface,
+                          color: Theme.of(context)
+                              .colorScheme
+                              .surfaceContainerLow
+                              .withValues(alpha: 0.82),
                           child: SizedBox(
                             width: 56,
                             child: Align(
@@ -188,7 +199,6 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                             ),
                           ),
                         ),
-                        const VerticalDivider(width: 1, thickness: 1),
                       ],
                     ),
             ),
@@ -275,7 +285,7 @@ class _TodayTotalHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final currency = NumberFormat.currency(symbol: r'$', decimalDigits: 2);
+    final currency = NumberFormat.currency(symbol: r'', decimalDigits: 0);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -344,7 +354,7 @@ class _DailyExpenseBarChart extends StatelessWidget {
               }
               final d = summary.dailyTotals[i];
               final currency = NumberFormat.currency(
-                symbol: r'$',
+                symbol: r'',
                 decimalDigits: 2,
               );
               return BarTooltipItem(
