@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 
@@ -9,6 +10,31 @@ import '../../dashboard/application/dashboard_expense_summary_provider.dart';
 import '../application/categories_provider.dart';
 import '../application/expenses_list_notifier.dart';
 import '../data/expenses_api.dart';
+
+class _MinQuantityInputFormatter extends TextInputFormatter {
+  @override
+  TextEditingValue formatEditUpdate(
+    TextEditingValue oldValue,
+    TextEditingValue newValue,
+  ) {
+    if (newValue.text.isEmpty) {
+      return const TextEditingValue(
+        text: '1',
+        selection: TextSelection.collapsed(offset: 1),
+      );
+    }
+
+    final parsed = int.tryParse(newValue.text);
+    if (parsed != null && parsed < 1) {
+      return const TextEditingValue(
+        text: '1',
+        selection: TextSelection.collapsed(offset: 1),
+      );
+    }
+
+    return newValue;
+  }
+}
 
 class AddExpenseSheet extends ConsumerStatefulWidget {
   const AddExpenseSheet({super.key});
@@ -20,17 +46,43 @@ class AddExpenseSheet extends ConsumerStatefulWidget {
 class _AddExpenseSheetState extends ConsumerState<AddExpenseSheet> {
   final _formKey = GlobalKey<FormState>();
   final _itemController = TextEditingController();
+  final _quantityController = TextEditingController(text: '1');
   final _priceController = TextEditingController();
+  final _totalController = TextEditingController(text: '0.00');
   XFile? _receipt;
   int? _selectedCategoryId;
   bool _saving = false;
   String? _error;
 
   @override
+  void initState() {
+    super.initState();
+    _priceController.addListener(_syncTotal);
+    _quantityController.addListener(_syncTotal);
+  }
+
+  @override
   void dispose() {
+    _priceController.removeListener(_syncTotal);
+    _quantityController.removeListener(_syncTotal);
     _itemController.dispose();
+    _quantityController.dispose();
     _priceController.dispose();
+    _totalController.dispose();
     super.dispose();
+  }
+
+  void _syncTotal() {
+    final price = num.tryParse(_priceController.text.trim()) ?? 0;
+    final quantity = int.tryParse(_quantityController.text.trim()) ?? 1;
+    final formatted = (price * quantity).toStringAsFixed(2);
+    if (_totalController.text == formatted) {
+      return;
+    }
+    _totalController.value = TextEditingValue(
+      text: formatted,
+      selection: TextSelection.collapsed(offset: formatted.length),
+    );
   }
 
   String _filenameFromPath(String path) {
@@ -66,9 +118,11 @@ class _AddExpenseSheetState extends ConsumerState<AddExpenseSheet> {
       final api = ref.read(expensesApiProvider);
       final receipt = _receipt;
       final hasReceipt = receipt != null && receipt.path.isNotEmpty;
+      final quantity = int.tryParse(_quantityController.text.trim()) ?? 1;
       await api.createExpense(
         token: token,
         item: hasReceipt ? null : _itemController.text.trim(),
+        quantity: hasReceipt ? null : quantity,
         price: hasReceipt ? null : _priceController.text.trim(),
         receiptFilePath: receipt?.path,
         receiptFilename: receipt != null
@@ -188,10 +242,35 @@ class _AddExpenseSheetState extends ConsumerState<AddExpenseSheet> {
             ),
             const SizedBox(height: 12),
             TextFormField(
+              controller: _quantityController,
+              keyboardType: TextInputType.number,
+              inputFormatters: [
+                FilteringTextInputFormatter.digitsOnly,
+                _MinQuantityInputFormatter(),
+              ],
+              textInputAction: TextInputAction.next,
+              decoration: const InputDecoration(
+                labelText: 'Quantity',
+                border: OutlineInputBorder(),
+              ),
+              validator: (v) {
+                if (_receipt != null) {
+                  return null;
+                }
+                final n = int.tryParse(v?.trim() ?? '');
+                if (n == null || n < 1) {
+                  return 'Quantity must be at least 1.';
+                }
+                return null;
+              },
+            ),
+            const SizedBox(height: 12),
+            TextFormField(
               controller: _priceController,
               keyboardType: const TextInputType.numberWithOptions(
                 decimal: true,
               ),
+              textInputAction: TextInputAction.next,
               decoration: const InputDecoration(
                 labelText: 'Price',
                 border: OutlineInputBorder(),
@@ -210,10 +289,20 @@ class _AddExpenseSheetState extends ConsumerState<AddExpenseSheet> {
                 return null;
               },
             ),
+            const SizedBox(height: 12),
+            TextFormField(
+              controller: _totalController,
+              readOnly: true,
+              enableInteractiveSelection: false,
+              decoration: const InputDecoration(
+                labelText: 'Total',
+                border: OutlineInputBorder(),
+              ),
+            ),
             if (_receipt != null) ...[
               const SizedBox(height: 8),
               Text(
-                'Item and price will be read from the receipt.',
+                'Item, quantity, price, and total will be read from the receipt.',
                 style: Theme.of(context).textTheme.bodySmall,
               ),
             ],

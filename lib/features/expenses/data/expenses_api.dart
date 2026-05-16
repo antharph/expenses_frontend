@@ -65,6 +65,7 @@ class ExpensesApi {
   Future<Map<String, dynamic>> createExpense({
     required String token,
     String? item,
+    int? quantity,
     String? price,
     String? receiptFilePath,
     String? receiptFilename,
@@ -81,6 +82,7 @@ class ExpensesApi {
       );
     } else {
       map['item'] = item ?? '';
+      map['quantity'] = '${quantity ?? 1}';
       map['price'] = price ?? '';
     }
 

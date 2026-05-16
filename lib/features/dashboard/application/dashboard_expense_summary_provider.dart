@@ -94,8 +94,8 @@ Future<DashboardExpenseSummary> _loadSummary(
     if (day.isBefore(rangeStart) || day.isAfter(today)) {
       continue;
     }
-    final price = double.tryParse(e.price) ?? 0;
-    byDay[day] = (byDay[day] ?? 0) + price;
+    final amount = double.tryParse(e.total) ?? 0;
+    byDay[day] = (byDay[day] ?? 0) + amount;
   }
 
   final dailyTotals = List<DailyExpenseTotal>.generate(7, (i) {

@@ -239,7 +239,7 @@ class _ExpenseRow extends ConsumerWidget {
             SizedBox(
               width: _amountColumnWidth,
               child: Text(
-                expense.price,
+                expense.total,
                 textAlign: TextAlign.right,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
