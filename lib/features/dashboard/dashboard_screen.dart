@@ -10,6 +10,28 @@ import '../auth/application/session_notifier.dart';
 import 'application/dashboard_expense_summary_provider.dart';
 import '../expenses/presentation/expenses_screen.dart';
 
+/// Ceiling for bar chart axis only (not data).
+double _niceChartCeiling(double dataMax, {double headroom = 1.08}) {
+  if (dataMax <= 0) return 1;
+  final raw = dataMax * headroom;
+  final exponent =
+      math.pow(10.0, (math.log(raw) / math.ln10).floor()).toDouble();
+  final n = raw / exponent;
+  final niceFrac = n <= 1 ? 1.0 : n <= 2 ? 2.0 : n <= 5 ? 5.0 : 10.0;
+  return niceFrac * exponent;
+}
+
+String _axisMoneyLabel(double value) {
+  if (value.abs() < 1e-6) {
+    return r'$0';
+  }
+  final isIntegerLike = value == value.roundToDouble();
+  if (isIntegerLike) {
+    return NumberFormat.currency(symbol: r'$', decimalDigits: 0).format(value);
+  }
+  return NumberFormat.currency(symbol: r'$', decimalDigits: 1).format(value);
+}
+
 class DashboardScreen extends ConsumerStatefulWidget {
   const DashboardScreen({super.key});
 
@@ -23,6 +45,25 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
 
   static const Duration _railAnimationDuration = Duration(milliseconds: 250);
 
+  /// Below this width an expanded rail feels “full width”; taps on the dimmed
+  /// overlay collapse it so sheet content stays readable.
+  static const double _compactRailWidthBreakpoint = 900;
+
+  IconButtonThemeData _flatNavIconTheme(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final style = IconButton.styleFrom(
+      foregroundColor: scheme.onSurfaceVariant,
+      elevation: 0,
+      shadowColor: Colors.transparent,
+      surfaceTintColor: Colors.transparent,
+      splashFactory: InkRipple.splashFactory,
+      visualDensity: VisualDensity.standard,
+      minimumSize: const Size(48, 48),
+      tapTargetSize: MaterialTapTargetSize.padded,
+    );
+    return IconButtonThemeData(style: style);
+  }
+
   Future<void> _logout() async {
     await ref.read(sessionProvider.notifier).logout();
     if (!mounted) {
@@ -33,98 +74,134 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final topInset = MediaQuery.paddingOf(context).top;
+    final width = MediaQuery.sizeOf(context).width;
+    final compactRail = width < _compactRailWidthBreakpoint;
+
+    Widget body = _railIndex == 0
+        ? const _DashboardHome()
+        : const ExpensesScreen();
+
+    if (compactRail && _railExpanded) {
+      body = Stack(
+        fit: StackFit.expand,
+        clipBehavior: Clip.hardEdge,
+        children: [
+          body,
+          Positioned.fill(
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: () => setState(() => _railExpanded = false),
+              child: ColoredBox(
+                color: Colors.black.withValues(alpha: 0.12),
+              ),
+            ),
+          ),
+        ],
+      );
+    }
+
+    final railCollapseButton = Tooltip(
+      message: 'Collapse sidebar',
+      child: IconButton(
+        icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
+        onPressed: () => setState(() => _railExpanded = false),
+      ),
+    );
+
+    final railExpandButton = Tooltip(
+      message: 'Expand sidebar',
+      child: IconButton(
+        icon: const Icon(Icons.menu_rounded),
+        onPressed: () => setState(() => _railExpanded = true),
+      ),
+    );
 
     return Scaffold(
       body: Row(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          AnimatedSize(
-            duration: _railAnimationDuration,
-            curve: Curves.easeInOutCubic,
-            alignment: Alignment.centerLeft,
-            child: _railExpanded
-                ? Stack(
-                    clipBehavior: Clip.none,
-                    alignment: Alignment.centerLeft,
-                    children: [
-                      Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          NavigationRail(
-                            selectedIndex: _railIndex,
-                            onDestinationSelected: (index) {
-                              if (index == 2) {
-                                _logout();
-                                return;
+          IconButtonTheme(
+            data: _flatNavIconTheme(context),
+            child: AnimatedSize(
+              duration: _railAnimationDuration,
+              curve: Curves.easeInOutCubic,
+              alignment: Alignment.centerLeft,
+              child: _railExpanded
+                  ? Row(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        NavigationRail(
+                          selectedIndex: _railIndex,
+                          onDestinationSelected: (index) {
+                            if (index == 2) {
+                              _logout();
+                              return;
+                            }
+                            setState(() {
+                              _railIndex = index;
+                              if (compactRail) {
+                                _railExpanded = false;
                               }
-                              setState(() => _railIndex = index);
-                            },
-                            labelType: NavigationRailLabelType.all,
-                            destinations: const [
-                              NavigationRailDestination(
-                                icon: Icon(Icons.dashboard_outlined),
-                                selectedIcon: Icon(Icons.dashboard),
-                                label: Text('Dashboard'),
-                              ),
-                              NavigationRailDestination(
-                                icon: Icon(Icons.receipt_long_outlined),
-                                selectedIcon: Icon(Icons.receipt_long),
-                                label: Text('Expenses'),
-                              ),
-                              NavigationRailDestination(
-                                icon: Icon(Icons.logout_outlined),
-                                selectedIcon: Icon(Icons.logout),
-                                label: Text('Logout'),
-                              ),
-                            ],
+                            });
+                          },
+                          labelType: NavigationRailLabelType.all,
+                          leading: Padding(
+                            padding: const EdgeInsets.only(top: 8),
+                            child: railCollapseButton,
                           ),
-                          const VerticalDivider(width: 1),
-                        ],
-                      ),
-                      Positioned(
-                        right: -20,
-                        top: topInset + 12,
-                        child: FloatingActionButton.small(
-                          heroTag: 'dashboard_rail_toggle',
-                          tooltip: 'Collapse sidebar',
-                          onPressed: () =>
-                              setState(() => _railExpanded = false),
-                          child: const Icon(Icons.chevron_left),
+                          destinations: const [
+                            NavigationRailDestination(
+                              icon: Icon(Icons.dashboard_outlined),
+                              selectedIcon: Icon(Icons.dashboard),
+                              label: Text('Dashboard'),
+                            ),
+                            NavigationRailDestination(
+                              icon: Icon(Icons.receipt_long_outlined),
+                              selectedIcon: Icon(Icons.receipt_long),
+                              label: Text('Expenses'),
+                            ),
+                            NavigationRailDestination(
+                              icon: Icon(Icons.logout_outlined),
+                              selectedIcon: Icon(Icons.logout),
+                              label: Text('Logout'),
+                            ),
+                          ],
                         ),
-                      ),
-                    ],
-                  )
-                : SizedBox(height: MediaQuery.sizeOf(context).height, width: 0),
-          ),
-          Expanded(
-            child: Stack(
-              clipBehavior: Clip.none,
-              children: [
-                Positioned.fill(
-                  child: _railIndex == 0
-                      ? const _DashboardHome()
-                      : const ExpensesScreen(),
-                ),
-                if (!_railExpanded)
-                  Positioned(
-                    left: 16,
-                    top: topInset + 12,
-                    child: FloatingActionButton.small(
-                      heroTag: 'dashboard_rail_toggle',
-                      tooltip: 'Show sidebar',
-                      onPressed: () => setState(() => _railExpanded = true),
-                      child: const Icon(Icons.menu_rounded),
+                        const VerticalDivider(width: 1, thickness: 1),
+                      ],
+                    )
+                  : Row(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Material(
+                          color: Theme.of(context).colorScheme.surface,
+                          child: SizedBox(
+                            width: 56,
+                            child: Align(
+                              alignment: Alignment.topCenter,
+                              child: Padding(
+                                padding: const EdgeInsets.only(top: 8),
+                                child: railExpandButton,
+                              ),
+                            ),
+                          ),
+                        ),
+                        const VerticalDivider(width: 1, thickness: 1),
+                      ],
                     ),
-                  ),
-              ],
             ),
           ),
+          Expanded(child: body),
         ],
       ),
     );
   }
 }
+
+/// Shared horizontal inset so section headers and chart copy line up visually.
+const double _kDashboardContentGutter = 24;
 
 class _DashboardHome extends ConsumerWidget {
   const _DashboardHome();
@@ -132,24 +209,32 @@ class _DashboardHome extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final summaryAsync = ref.watch(dashboardExpenseSummaryProvider);
+    const topPad = 12.0;
 
     return Padding(
-      padding: const EdgeInsets.all(24),
+      padding: const EdgeInsets.fromLTRB(
+        _kDashboardContentGutter,
+        topPad,
+        _kDashboardContentGutter,
+        _kDashboardContentGutter,
+      ),
       child: summaryAsync.when(
         data: (summary) => SingleChildScrollView(
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               _TodayTotalHeader(total: summary.todayTotal),
-              const SizedBox(height: 24),
+              const SizedBox(height: 40),
               Text(
                 'Last 7 days',
-                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                style: Theme.of(context).textTheme.titleSmall?.copyWith(
                   color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  fontWeight: FontWeight.w500,
                 ),
               ),
               const SizedBox(height: 12),
               SizedBox(
+                width: double.infinity,
                 height: 240,
                 child: _DailyExpenseBarChart(summary: summary),
               ),
@@ -193,16 +278,25 @@ class _TodayTotalHeader extends StatelessWidget {
     final currency = NumberFormat.currency(symbol: r'$', decimalDigits: 2);
 
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
           "Today's total",
-          style: theme.textTheme.titleMedium?.copyWith(
+          style: theme.textTheme.bodySmall?.copyWith(
             color: theme.colorScheme.onSurfaceVariant,
+            fontWeight: FontWeight.w400,
+            letterSpacing: 0.2,
           ),
         ),
-        const SizedBox(height: 4),
-        Text(currency.format(total), style: theme.textTheme.headlineMedium),
+        const SizedBox(height: 6),
+        Text(
+          currency.format(total),
+          style: theme.textTheme.headlineLarge?.copyWith(
+            fontWeight: FontWeight.w700,
+            letterSpacing: -0.5,
+            color: theme.colorScheme.onSurface,
+          ),
+        ),
       ],
     );
   }
@@ -213,21 +307,36 @@ class _DailyExpenseBarChart extends StatelessWidget {
 
   final DashboardExpenseSummary summary;
 
+  static const _gridDivisions = 3;
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final totals = summary.dailyTotals.map((e) => e.total).toList();
     final maxExpense = totals.isEmpty ? 0.0 : totals.reduce(math.max);
-    final maxY = maxExpense <= 0 ? 1.0 : maxExpense * 1.15;
+    final chartMaxY = maxExpense <= 0 ? 1.0 : _niceChartCeiling(maxExpense);
+    final horizontalInterval = chartMaxY / _gridDivisions;
 
     final dayLabels = DateFormat.E();
 
     return BarChart(
       BarChartData(
-        maxY: maxY,
+        maxY: chartMaxY,
         alignment: BarChartAlignment.spaceAround,
+        groupsSpace: 14,
         barTouchData: BarTouchData(
+          enabled: true,
+          handleBuiltInTouches: true,
+          longPressDuration: Duration.zero,
           touchTooltipData: BarTouchTooltipData(
+            tooltipPadding: const EdgeInsets.symmetric(
+              horizontal: 12,
+              vertical: 8,
+            ),
+            tooltipMargin: 8,
+            getTooltipColor: (_) => theme.colorScheme.inverseSurface,
+            fitInsideHorizontally: true,
+            fitInsideVertically: true,
             getTooltipItem: (group, groupIndex, rod, rodIndex) {
               final i = group.x.toInt();
               if (i < 0 || i >= summary.dailyTotals.length) {
@@ -239,10 +348,12 @@ class _DailyExpenseBarChart extends StatelessWidget {
                 decimalDigits: 2,
               );
               return BarTooltipItem(
-                '${DateFormat.MMMd().format(d.day)}\n${currency.format(d.total)}',
-                theme.textTheme.labelSmall?.copyWith(
+                '${DateFormat.MMMd().format(d.day)}\n'
+                '${currency.format(d.total)}',
+                theme.textTheme.labelMedium?.copyWith(
                       color: theme.colorScheme.onInverseSurface,
                       fontWeight: FontWeight.w600,
+                      height: 1.35,
                     ) ??
                     const TextStyle(),
               );
@@ -260,20 +371,25 @@ class _DailyExpenseBarChart extends StatelessWidget {
           leftTitles: AxisTitles(
             sideTitles: SideTitles(
               showTitles: true,
-              reservedSize: 40,
-              interval: maxY <= 4 ? 1 : null,
+              reservedSize: 44,
+              interval: horizontalInterval,
+              maxIncluded: false,
+              minIncluded: true,
               getTitlesWidget: (value, meta) {
-                if (value > meta.max) {
+                if (value > meta.max + 1e-6 || value < -1e-9) {
                   return const SizedBox.shrink();
                 }
-                return Padding(
-                  padding: const EdgeInsets.only(right: 8),
+                final labelStyle = theme.textTheme.labelSmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                );
+
+                return SideTitleWidget(
+                  meta: meta,
+                  space: 8,
                   child: Text(
-                    value == value.roundToDouble()
-                        ? value.toInt().toString()
-                        : value.toStringAsFixed(1),
-                    style: theme.textTheme.labelSmall,
-                    textAlign: TextAlign.end,
+                    _axisMoneyLabel(value),
+                    style: labelStyle,
+                    textAlign: TextAlign.start,
                   ),
                 );
               },
@@ -282,25 +398,35 @@ class _DailyExpenseBarChart extends StatelessWidget {
           bottomTitles: AxisTitles(
             sideTitles: SideTitles(
               showTitles: true,
+              reservedSize: 28,
               getTitlesWidget: (value, meta) {
                 final i = value.toInt();
                 if (i < 0 || i >= summary.dailyTotals.length) {
                   return const SizedBox.shrink();
                 }
                 final d = summary.dailyTotals[i].day;
+                final now = DateTime.now();
                 final isToday =
-                    d.year == DateTime.now().year &&
-                    d.month == DateTime.now().month &&
-                    d.day == DateTime.now().day;
-                return Padding(
-                  padding: const EdgeInsets.only(top: 8),
-                  child: Text(
-                    dayLabels.format(d),
-                    style: theme.textTheme.labelSmall?.copyWith(
-                      fontWeight: isToday ? FontWeight.w700 : FontWeight.w400,
-                      color: isToday
-                          ? theme.colorScheme.primary
-                          : theme.colorScheme.onSurfaceVariant,
+                    d.year == now.year &&
+                    d.month == now.month &&
+                    d.day == now.day;
+
+                final labelStyle = theme.textTheme.labelSmall?.copyWith(
+                  fontWeight: isToday ? FontWeight.w600 : FontWeight.w400,
+                  color: isToday
+                      ? theme.colorScheme.primary
+                      : theme.colorScheme.onSurfaceVariant,
+                );
+
+                return SideTitleWidget(
+                  meta: meta,
+                  space: 0,
+                  child: Padding(
+                    padding: const EdgeInsets.only(top: 10),
+                    child: Text(
+                      dayLabels.format(d),
+                      style: labelStyle,
+                      textAlign: TextAlign.center,
                     ),
                   ),
                 );
@@ -311,9 +437,19 @@ class _DailyExpenseBarChart extends StatelessWidget {
         gridData: FlGridData(
           show: true,
           drawVerticalLine: false,
-          horizontalInterval: maxY <= 4 ? 1 : maxY / 4,
+          horizontalInterval: horizontalInterval,
+          checkToShowHorizontalLine: (value) {
+            if (value < -1e-9 || value > chartMaxY + 1e-6) {
+              return false;
+            }
+            if ((value - chartMaxY).abs() < horizontalInterval * 0.015) {
+              return false;
+            }
+            final n = value / horizontalInterval;
+            return (n - n.round()).abs() < 0.02;
+          },
           getDrawingHorizontalLine: (value) => FlLine(
-            color: theme.colorScheme.outlineVariant.withValues(alpha: 0.5),
+            color: theme.colorScheme.outlineVariant.withValues(alpha: 0.32),
             strokeWidth: 1,
           ),
         ),
