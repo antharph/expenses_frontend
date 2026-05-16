@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../auth/application/auth_page.dart';
 import '../auth/application/session_notifier.dart';
+import '../expenses/presentation/expenses_screen.dart';
 
 class DashboardScreen extends ConsumerStatefulWidget {
   const DashboardScreen({super.key});
@@ -33,7 +34,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
           NavigationRail(
             selectedIndex: _railIndex,
             onDestinationSelected: (index) {
-              if (index == 1) {
+              if (index == 2) {
                 _logout();
                 return;
               }
@@ -47,6 +48,11 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                 label: Text('Dashboard'),
               ),
               NavigationRailDestination(
+                icon: Icon(Icons.receipt_long_outlined),
+                selectedIcon: Icon(Icons.receipt_long),
+                label: Text('Expenses'),
+              ),
+              NavigationRailDestination(
                 icon: Icon(Icons.logout_outlined),
                 selectedIcon: Icon(Icons.logout),
                 label: Text('Logout'),
@@ -55,16 +61,18 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
           ),
           const VerticalDivider(width: 1),
           Expanded(
-            child: Padding(
-              padding: const EdgeInsets.all(24),
-              child: Align(
-                alignment: Alignment.topLeft,
-                child: Text(
-                  'Welcome${name.isEmpty ? '' : ', $name'}',
-                  style: Theme.of(context).textTheme.headlineMedium,
-                ),
-              ),
-            ),
+            child: _railIndex == 0
+                ? Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Align(
+                      alignment: Alignment.topLeft,
+                      child: Text(
+                        'Welcome${name.isEmpty ? '' : ', $name'}',
+                        style: Theme.of(context).textTheme.headlineMedium,
+                      ),
+                    ),
+                  )
+                : const ExpensesScreen(),
           ),
         ],
       ),

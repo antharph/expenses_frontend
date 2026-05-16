@@ -1,0 +1,169 @@
+import 'package:dio/dio.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../../core/errors/api_errors.dart';
+import '../../auth/application/session_notifier.dart';
+import '../data/expenses_api.dart';
+import '../domain/expense.dart';
+
+class ExpensesListState {
+  const ExpensesListState({
+    this.items = const [],
+    this.isLoadingInitial = false,
+    this.isLoadingMore = false,
+    this.initialError,
+    this.hasMore = true,
+    this.loadedPage = 0,
+  });
+
+  final List<Expense> items;
+  final bool isLoadingInitial;
+  final bool isLoadingMore;
+  final String? initialError;
+  final bool hasMore;
+  final int loadedPage;
+
+  ExpensesListState copyWith({
+    List<Expense>? items,
+    bool? isLoadingInitial,
+    bool? isLoadingMore,
+    String? initialError,
+    bool clearInitialError = false,
+    bool? hasMore,
+    int? loadedPage,
+  }) {
+    return ExpensesListState(
+      items: items ?? this.items,
+      isLoadingInitial: isLoadingInitial ?? this.isLoadingInitial,
+      isLoadingMore: isLoadingMore ?? this.isLoadingMore,
+      initialError: clearInitialError ? null : (initialError ?? this.initialError),
+      hasMore: hasMore ?? this.hasMore,
+      loadedPage: loadedPage ?? this.loadedPage,
+    );
+  }
+}
+
+final expensesListProvider =
+    NotifierProvider<ExpensesListNotifier, ExpensesListState>(ExpensesListNotifier.new);
+
+class ExpensesListNotifier extends Notifier<ExpensesListState> {
+  @override
+  ExpensesListState build() => const ExpensesListState();
+
+  ExpensesApi get _api => ref.read(expensesApiProvider);
+
+  String? get _token => ref.read(sessionProvider).valueOrNull?.token;
+
+  Future<void> loadInitial() async {
+    final token = _token;
+    if (token == null) {
+      return;
+    }
+    if (state.isLoadingInitial) {
+      return;
+    }
+
+    state = state.copyWith(
+      isLoadingInitial: true,
+      clearInitialError: true,
+      items: const [],
+      loadedPage: 0,
+      hasMore: true,
+    );
+
+    try {
+      final body = await _api.listExpenses(token: token, page: 1);
+      final parsed = _parsePage(body, appendTo: const []);
+      state = state.copyWith(
+        isLoadingInitial: false,
+        items: parsed.items,
+        hasMore: parsed.hasMore,
+        loadedPage: 1,
+      );
+    } on DioException catch (e) {
+      state = state.copyWith(
+        isLoadingInitial: false,
+        initialError: formatApiError(e),
+        hasMore: false,
+      );
+    } catch (e) {
+      state = state.copyWith(
+        isLoadingInitial: false,
+        initialError: e.toString(),
+        hasMore: false,
+      );
+    }
+  }
+
+  Future<void> loadMore() async {
+    final token = _token;
+    if (token == null || !state.hasMore || state.isLoadingMore || state.isLoadingInitial) {
+      return;
+    }
+    if (state.loadedPage == 0) {
+      return;
+    }
+
+    final nextPage = state.loadedPage + 1;
+    state = state.copyWith(isLoadingMore: true);
+
+    try {
+      final body = await _api.listExpenses(token: token, page: nextPage);
+      final parsed = _parsePage(body, appendTo: state.items);
+      state = state.copyWith(
+        isLoadingMore: false,
+        items: parsed.items,
+        hasMore: parsed.hasMore,
+        loadedPage: nextPage,
+      );
+    } on DioException catch (e) {
+      state = state.copyWith(isLoadingMore: false, initialError: formatApiError(e));
+    } catch (e) {
+      state = state.copyWith(isLoadingMore: false, initialError: e.toString());
+    }
+  }
+
+  Future<void> refresh() async {
+    await loadInitial();
+  }
+
+  _ParsedPage _parsePage(Map<String, dynamic> body, {required List<Expense> appendTo}) {
+    final rawList = body['data'];
+    final list = rawList is List<dynamic> ? rawList : const <dynamic>[];
+    final newItems = list
+        .map((e) => Expense.fromJson(Map<String, dynamic>.from(e as Map)))
+        .toList();
+
+    final meta = body['meta'];
+    var hasMore = false;
+    if (meta is Map<String, dynamic>) {
+      final current = _asInt(meta['current_page']);
+      final last = _asInt(meta['last_page']);
+      if (current != null && last != null) {
+        hasMore = current < last;
+      }
+    }
+
+    return _ParsedPage(
+      items: [...appendTo, ...newItems],
+      hasMore: hasMore,
+    );
+  }
+
+  int? _asInt(Object? value) {
+    if (value is int) {
+      return value;
+    }
+    if (value is num) {
+      return value.toInt();
+    }
+    return int.tryParse(value?.toString() ?? '');
+  }
+}
+
+class _ParsedPage {
+  _ParsedPage({required this.items, required this.hasMore});
+
+  final List<Expense> items;
+  final bool hasMore;
+}

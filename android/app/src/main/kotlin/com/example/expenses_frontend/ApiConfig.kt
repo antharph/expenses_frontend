@@ -15,5 +15,7 @@ object ApiConfig {
         const val AUTH_GOOGLE: String = "$API_V1_PREFIX/auth/google"
         const val DASHBOARD: String = "$API_V1_PREFIX/dashboard"
         const val LOGOUT: String = "$API_V1_PREFIX/logout"
+        const val EXPENSES: String = "$API_V1_PREFIX/expenses"
+        const val CATEGORIES: String = "$API_V1_PREFIX/categories"
     }
 }
