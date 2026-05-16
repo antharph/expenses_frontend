@@ -94,4 +94,12 @@ class ExpensesApi {
     );
     return response.data ?? <String, dynamic>{};
   }
+
+  Future<void> deleteExpense({
+    required String token,
+    required int id,
+  }) async {
+    final client = _jsonClient(token);
+    await client.delete<void>('/api/v1/expenses/$id');
+  }
 }

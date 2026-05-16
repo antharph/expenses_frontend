@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_slidable/flutter_slidable.dart';
 
 import '../application/expenses_list_notifier.dart';
 import '../domain/expense.dart';
@@ -102,45 +103,78 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen> {
                 )
               : RefreshIndicator(
                   onRefresh: () => ref.read(expensesListProvider.notifier).refresh(),
-                  child: ListView.builder(
-                    controller: _scrollController,
-                    physics: const AlwaysScrollableScrollPhysics(),
-                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 88),
-                    itemCount: list.items.length + (list.hasMore ? 1 : 0),
-                    itemBuilder: (context, index) {
-                      if (index >= list.items.length) {
-                        return Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 16),
-                          child: Center(
-                            child: list.isLoadingMore
-                                ? const CircularProgressIndicator()
-                                : const SizedBox.shrink(),
-                          ),
+                  child: SlidableAutoCloseBehavior(
+                    child: ListView.builder(
+                      controller: _scrollController,
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 88),
+                      itemCount: list.items.length + (list.hasMore ? 1 : 0),
+                      itemBuilder: (context, index) {
+                        if (index >= list.items.length) {
+                          return Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 16),
+                            child: Center(
+                              child: list.isLoadingMore
+                                  ? const CircularProgressIndicator()
+                                  : const SizedBox.shrink(),
+                            ),
+                          );
+                        }
+                        return _ExpenseRow(
+                          expense: list.items[index],
+                          formatDate: _formatDate,
                         );
-                      }
-                      return _ExpenseRow(
-                        expense: list.items[index],
-                        formatDate: _formatDate,
-                      );
-                    },
+                      },
+                    ),
                   ),
                 ),
     );
   }
 }
 
-class _ExpenseRow extends StatelessWidget {
+class _ExpenseRow extends ConsumerWidget {
   const _ExpenseRow({required this.expense, required this.formatDate});
 
   final Expense expense;
   final String Function(String iso) formatDate;
 
+  Future<void> _confirmDelete(BuildContext context, WidgetRef ref) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete expense'),
+        content: Text('Remove "${expense.item}"? This cannot be undone.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !context.mounted) {
+      return;
+    }
+
+    final err = await ref.read(expensesListProvider.notifier).deleteExpense(expense.id);
+    if (!context.mounted) {
+      return;
+    }
+    if (err != null) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(err)));
+    }
+  }
+
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
 
-    return Card(
-      margin: const EdgeInsets.only(bottom: 8),
+    final card = Card(
+      margin: EdgeInsets.zero,
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
         child: Row(
@@ -172,6 +206,31 @@ class _ExpenseRow extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Slidable(
+        key: ValueKey<int>(expense.id),
+        groupTag: 'expenses_list',
+        endActionPane: ActionPane(
+          extentRatio: 0.26,
+          motion: const BehindMotion(),
+          dragDismissible: false,
+          children: [
+            SlidableAction(
+              onPressed: (_) => _confirmDelete(context, ref),
+              backgroundColor: theme.colorScheme.error,
+              foregroundColor: theme.colorScheme.onError,
+              icon: Icons.delete_outline,
+              label: 'Delete',
+              flex: 1,
+              padding: EdgeInsets.zero,
+            ),
+          ],
+        ),
+        child: card,
       ),
     );
   }

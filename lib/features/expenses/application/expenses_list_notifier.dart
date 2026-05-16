@@ -127,6 +127,26 @@ class ExpensesListNotifier extends Notifier<ExpensesListState> {
     await loadInitial();
   }
 
+  /// Removes the expense locally on success; returns an error message on failure.
+  Future<String?> deleteExpense(int id) async {
+    final token = _token;
+    if (token == null) {
+      return 'Not signed in.';
+    }
+
+    try {
+      await _api.deleteExpense(token: token, id: id);
+      state = state.copyWith(
+        items: state.items.where((e) => e.id != id).toList(),
+      );
+      return null;
+    } on DioException catch (e) {
+      return formatApiError(e);
+    } catch (e) {
+      return e.toString();
+    }
+  }
+
   _ParsedPage _parsePage(Map<String, dynamic> body, {required List<Expense> appendTo}) {
     final rawList = body['data'];
     final list = rawList is List<dynamic> ? rawList : const <dynamic>[];
