@@ -11,14 +11,33 @@ class DailyExpenseTotal {
   final double total;
 }
 
+class CategoryExpenseTotal {
+  const CategoryExpenseTotal({required this.label, required this.total});
+
+  final String label;
+  final double total;
+}
+
 class DashboardExpenseSummary {
   const DashboardExpenseSummary({
     required this.todayTotal,
     required this.dailyTotals,
+    required this.categoryTotals,
   });
 
   final double todayTotal;
   final List<DailyExpenseTotal> dailyTotals;
+  final List<CategoryExpenseTotal> categoryTotals;
+}
+
+const String kNoCategoryLabel = 'No Category';
+
+String expenseCategoryLabel(Expense expense) {
+  final name = expense.categoryName?.trim();
+  if (name != null && name.isNotEmpty) {
+    return name;
+  }
+  return kNoCategoryLabel;
 }
 
 final dashboardExpenseSummaryProvider =
@@ -43,6 +62,7 @@ DashboardExpenseSummary _emptySummaryForLocalToday() {
       (i) =>
           DailyExpenseTotal(day: rangeStart.add(Duration(days: i)), total: 0),
     ),
+    categoryTotals: const [],
   );
 }
 
@@ -86,6 +106,8 @@ Future<DashboardExpenseSummary> _loadSummary(
     byDay[rangeStart.add(Duration(days: i))] = 0;
   }
 
+  final byCategory = <String, double>{};
+
   for (final e in accumulated) {
     final day = _expenseLocalDay(e.dateIso, now);
     if (day == null) {
@@ -96,6 +118,9 @@ Future<DashboardExpenseSummary> _loadSummary(
     }
     final amount = double.tryParse(e.total) ?? 0;
     byDay[day] = (byDay[day] ?? 0) + amount;
+
+    final label = expenseCategoryLabel(e);
+    byCategory[label] = (byCategory[label] ?? 0) + amount;
   }
 
   final dailyTotals = List<DailyExpenseTotal>.generate(7, (i) {
@@ -103,9 +128,15 @@ Future<DashboardExpenseSummary> _loadSummary(
     return DailyExpenseTotal(day: d, total: byDay[d] ?? 0);
   });
 
+  final categoryTotals = byCategory.entries
+      .map((e) => CategoryExpenseTotal(label: e.key, total: e.value))
+      .toList()
+    ..sort((a, b) => b.total.compareTo(a.total));
+
   return DashboardExpenseSummary(
     todayTotal: byDay[today] ?? 0,
     dailyTotals: dailyTotals,
+    categoryTotals: categoryTotals,
   );
 }
 

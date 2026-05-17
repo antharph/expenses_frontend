@@ -248,6 +248,16 @@ class _DashboardHome extends ConsumerWidget {
                 height: 240,
                 child: _DailyExpenseBarChart(summary: summary),
               ),
+              const SizedBox(height: 40),
+              Text(
+                'By category',
+                style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              const SizedBox(height: 12),
+              _CategoryExpensePieChart(summary: summary),
             ],
           ),
         ),
@@ -481,6 +491,134 @@ class _DailyExpenseBarChart extends StatelessWidget {
             ),
         ],
       ),
+    );
+  }
+}
+
+List<Color> _pieChartColors(ColorScheme scheme, int count) {
+  final base = <Color>[
+    scheme.primary,
+    scheme.secondary,
+    scheme.tertiary,
+    scheme.primaryContainer,
+    scheme.secondaryContainer,
+    scheme.tertiaryContainer,
+    scheme.error,
+    scheme.inversePrimary,
+  ];
+  if (count <= base.length) {
+    return base.sublist(0, count);
+  }
+  return List.generate(count, (i) => base[i % base.length]);
+}
+
+class _CategoryExpensePieChart extends StatelessWidget {
+  const _CategoryExpensePieChart({required this.summary});
+
+  final DashboardExpenseSummary summary;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final totals = summary.categoryTotals;
+    final grandTotal = totals.fold<double>(0, (sum, e) => sum + e.total);
+
+    if (grandTotal <= 0) {
+      return SizedBox(
+        width: double.infinity,
+        height: 200,
+        child: Center(
+          child: Text(
+            'No expenses in the last 7 days',
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+        ),
+      );
+    }
+
+    final colors = _pieChartColors(theme.colorScheme, totals.length);
+    final currency = NumberFormat.currency(symbol: r'', decimalDigits: 0);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(
+          width: double.infinity,
+          height: 220,
+          child: PieChart(
+            PieChartData(
+              sectionsSpace: 2,
+              centerSpaceRadius: 44,
+              pieTouchData: PieTouchData(enabled: true),
+              sections: [
+                for (var i = 0; i < totals.length; i++)
+                  PieChartSectionData(
+                    value: totals[i].total,
+                    color: colors[i],
+                    radius: 52,
+                    showTitle: totals[i].total / grandTotal >= 0.08,
+                    title:
+                        '${(totals[i].total / grandTotal * 100).round()}%',
+                    titleStyle: theme.textTheme.labelSmall?.copyWith(
+                      color: theme.colorScheme.onPrimary,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 16,
+          runSpacing: 10,
+          children: [
+            for (var i = 0; i < totals.length; i++)
+              _CategoryLegendChip(
+                color: colors[i],
+                label: totals[i].label,
+                amount: currency.format(totals[i].total),
+              ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+class _CategoryLegendChip extends StatelessWidget {
+  const _CategoryLegendChip({
+    required this.color,
+    required this.label,
+    required this.amount,
+  });
+
+  final Color color;
+  final String label;
+  final String amount;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 12,
+          height: 12,
+          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+        ),
+        const SizedBox(width: 8),
+        Text(
+          '$label · $amount',
+          style: theme.textTheme.labelMedium?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
+        ),
+      ],
     );
   }
 }
