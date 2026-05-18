@@ -317,17 +317,32 @@ class _WeekDashboardPage extends ConsumerWidget {
                 total: display.weekTotal,
                 categoryLabel: selectedCategory,
               ),
-              if (selectedCategory != null) ...[
-                const SizedBox(height: 8),
-                _CategoryFilterBanner(
-                  categoryLabel: selectedCategory,
-                  onClear: () {
-                    ref
-                        .read(dashboardCategoryFilterProvider(weekKey).notifier)
-                        .state = null;
-                  },
-                ),
-              ],
+              AnimatedSize(
+                duration: const Duration(milliseconds: 220),
+                curve: Curves.easeInOut,
+                alignment: Alignment.topCenter,
+                child: selectedCategory != null
+                    ? Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const SizedBox(height: 8),
+                          _CategoryFilterBanner(
+                            categoryLabel: selectedCategory,
+                            onClear: () {
+                              ref
+                                  .read(
+                                    dashboardCategoryFilterProvider(
+                                      weekKey,
+                                    ).notifier,
+                                  )
+                                  .state = null;
+                            },
+                          ),
+                        ],
+                      )
+                    : const SizedBox.shrink(),
+              ),
               const SizedBox(height: 40),
               _WeekRangeSubtitle(
                 startDate: summary.startDate,
@@ -760,7 +775,7 @@ class _CategoryExpensePieChart extends StatelessWidget {
     PieTouchResponse? response,
     List<CategoryExpenseTotal> totals,
   ) {
-    if (!event.isInterestedForInteractions || response == null) {
+    if (event is! FlTapUpEvent || response == null) {
       return;
     }
     final index = response.touchedSection?.touchedSectionIndex;
