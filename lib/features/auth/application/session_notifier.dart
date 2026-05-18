@@ -5,6 +5,7 @@ import 'package:google_sign_in/google_sign_in.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../core/errors/api_errors.dart';
+import '../../../core/timezone/device_timezone.dart';
 import '../data/auth_api.dart';
 import 'user_session.dart';
 
@@ -56,11 +57,13 @@ class SessionNotifier extends AsyncNotifier<UserSession?> {
     required String passwordConfirmation,
   }) async {
     try {
+      final timezone = await deviceTimezone();
       final data = await _api.register(
         name: name,
         email: email,
         password: password,
         passwordConfirmation: passwordConfirmation,
+        timezone: timezone,
       );
       final session = await _sessionFromAuthResponse(data);
       state = AsyncData(session);
@@ -122,7 +125,11 @@ class SessionNotifier extends AsyncNotifier<UserSession?> {
         return 'Unable to read Firebase ID token.';
       }
 
-      final data = await _api.loginWithGoogle(idToken: idToken);
+      final timezone = await deviceTimezone();
+      final data = await _api.loginWithGoogle(
+        idToken: idToken,
+        timezone: timezone,
+      );
       final session = await _sessionFromAuthResponse(data);
       state = AsyncData(session);
       return null;

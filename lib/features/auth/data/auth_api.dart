@@ -3,7 +3,15 @@ import 'package:dio/dio.dart';
 import '../../../core/config/api_config.dart';
 
 class AuthApi {
+  AuthApi({Dio? clientOverride}) : _clientOverride = clientOverride;
+
+  final Dio? _clientOverride;
+
   Dio _client(String? bearer) {
+    if (_clientOverride != null) {
+      return _clientOverride!;
+    }
+
     return Dio(
       BaseOptions(
         baseUrl: apiBaseUrl(),
@@ -19,6 +27,7 @@ class AuthApi {
     required String email,
     required String password,
     required String passwordConfirmation,
+    required String timezone,
   }) async {
     final client = _client(null);
     final response = await client.post<Map<String, dynamic>>(
@@ -28,6 +37,7 @@ class AuthApi {
         'email': email,
         'password': password,
         'password_confirmation': passwordConfirmation,
+        'timezone': timezone,
       },
     );
     return response.data ?? <String, dynamic>{};
@@ -47,11 +57,15 @@ class AuthApi {
 
   Future<Map<String, dynamic>> loginWithGoogle({
     required String idToken,
+    required String timezone,
   }) async {
     final client = _client(null);
     final response = await client.post<Map<String, dynamic>>(
       '/api/v1/auth/google',
-      data: {'id_token': idToken},
+      data: {
+        'id_token': idToken,
+        'timezone': timezone,
+      },
     );
     return response.data ?? <String, dynamic>{};
   }
