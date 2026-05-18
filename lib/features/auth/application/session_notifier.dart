@@ -83,7 +83,12 @@ class SessionNotifier extends AsyncNotifier<UserSession?> {
     required String password,
   }) async {
     try {
-      final data = await _api.login(email: email, password: password);
+      final timezone = await deviceTimezone();
+      final data = await _api.login(
+        email: email,
+        password: password,
+        timezone: timezone,
+      );
       final session = await _sessionFromAuthResponse(data);
       state = AsyncData(session);
       return null;

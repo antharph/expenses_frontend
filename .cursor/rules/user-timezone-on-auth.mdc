@@ -1,0 +1,35 @@
+---
+description: Require timezone on new auth flows; keep docs/user-timezone-on-auth.md in sync
+globs: lib/features/auth/**/*.dart,lib/core/timezone/**/*.dart,docs/user-timezone-on-auth.md,test/features/auth/**/*
+alwaysApply: false
+---
+
+# User timezone on registration and sign-in
+
+Canonical doc: **`docs/user-timezone-on-auth.md`**. Read it before changing auth or timezone behavior.
+
+## Requirement
+
+Any **new registration or sign-in** path that creates a user or should refresh `users.timezone` on the API **must**:
+
+1. Call **`await deviceTimezone()`** from `lib/core/timezone/device_timezone.dart` (do not duplicate timezone logic).
+2. Pass the result as **`timezone`** in the auth HTTP request body via **`AuthApi`**.
+3. Wire the call from **`SessionNotifier`** (or the same session layer used by existing flows).
+4. Coordinate **backend** changes in the `expenses` Laravel app (`timezone` validation + persistence on the matching `/api/v1/...` route).
+5. **Update `docs/user-timezone-on-auth.md`** — table row, flow subsection, and checklist if needed.
+6. Add or extend a test in **`test/features/auth/`** asserting the request JSON includes `timezone`.
+
+## Existing flows (do not regress)
+
+| Flow | Must send `timezone` |
+| --- | --- |
+| `AuthApi.register` / `SessionNotifier.register` | Yes |
+| `AuthApi.login` / `SessionNotifier.loginWithPassword` | Yes |
+| `AuthApi.loginWithGoogle` / `SessionNotifier.loginWithGoogle` | Yes |
+
+## Anti-patterns
+
+- Sending `UTC` by default without calling `deviceTimezone()`.
+- Adding a new OAuth/register endpoint without updating **`docs/user-timezone-on-auth.md`**.
+- Using `DEFAULT_TIMEZONE` or `.env` for per-user display timezone.
+- Relying on hot reload after adding `flutter_timezone` on iOS—require **`pod install`** and a full rebuild (see doc).

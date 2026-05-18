@@ -46,11 +46,16 @@ class AuthApi {
   Future<Map<String, dynamic>> login({
     required String email,
     required String password,
+    required String timezone,
   }) async {
     final client = _client(null);
     final response = await client.post<Map<String, dynamic>>(
       '/api/v1/login',
-      data: {'email': email, 'password': password},
+      data: {
+        'email': email,
+        'password': password,
+        'timezone': timezone,
+      },
     );
     return response.data ?? <String, dynamic>{};
   }
