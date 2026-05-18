@@ -294,41 +294,76 @@ class _WeekDashboardPage extends ConsumerWidget {
 
   final ExpenseWeekKey weekKey;
 
+  void _toggleCategoryFilter(WidgetRef ref, String label) {
+    final notifier = ref.read(dashboardCategoryFilterProvider(weekKey).notifier);
+    notifier.state = notifier.state == label ? null : label;
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final summaryAsync = ref.watch(dashboardExpenseSummaryProvider(weekKey));
+    final selectedCategory = ref.watch(dashboardCategoryFilterProvider(weekKey));
 
     return summaryAsync.when(
-      data: (summary) => SingleChildScrollView(
-        physics: const ClampingScrollPhysics(),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _WeekTotalHeader(total: summary.weekTotal),
-            const SizedBox(height: 40),
-            _WeekRangeSubtitle(
-              startDate: summary.startDate,
-              endDate: summary.endDate,
-            ),
-            const SizedBox(height: 12),
-            SizedBox(
-              width: double.infinity,
-              height: 248,
-              child: _DailyExpenseBarChart(summary: summary),
-            ),
-            const SizedBox(height: 40),
-            Text(
-              'By category',
-              style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
-                fontWeight: FontWeight.w500,
+      data: (summary) {
+        final display = summary.filteredView(categoryLabel: selectedCategory);
+
+        return SingleChildScrollView(
+          physics: const ClampingScrollPhysics(),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _WeekTotalHeader(
+                total: display.weekTotal,
+                categoryLabel: selectedCategory,
               ),
-            ),
-            const SizedBox(height: 12),
-            _CategoryExpensePieChart(summary: summary),
-          ],
-        ),
-      ),
+              if (selectedCategory != null) ...[
+                const SizedBox(height: 8),
+                _CategoryFilterBanner(
+                  categoryLabel: selectedCategory,
+                  onClear: () {
+                    ref
+                        .read(dashboardCategoryFilterProvider(weekKey).notifier)
+                        .state = null;
+                  },
+                ),
+              ],
+              const SizedBox(height: 40),
+              _WeekRangeSubtitle(
+                startDate: summary.startDate,
+                endDate: summary.endDate,
+              ),
+              const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
+                height: 248,
+                child: _DailyExpenseBarChart(summary: display),
+              ),
+              const SizedBox(height: 40),
+              Text(
+                'By category',
+                style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'Tap a slice to filter the chart above',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+              ),
+              const SizedBox(height: 12),
+              _CategoryExpensePieChart(
+                summary: summary,
+                selectedCategory: selectedCategory,
+                onCategorySelected: (label) => _toggleCategoryFilter(ref, label),
+              ),
+            ],
+          ),
+        );
+      },
       loading: () => const Center(child: CircularProgressIndicator()),
       error: (error, stackTrace) => Center(
         child: Column(
@@ -355,20 +390,25 @@ class _WeekDashboardPage extends ConsumerWidget {
 }
 
 class _WeekTotalHeader extends StatelessWidget {
-  const _WeekTotalHeader({required this.total});
+  const _WeekTotalHeader({
+    required this.total,
+    this.categoryLabel,
+  });
 
   final double total;
+  final String? categoryLabel;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final currency = NumberFormat.currency(symbol: r'', decimalDigits: 0);
+    final filtered = categoryLabel != null;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          'Total',
+          filtered ? 'Total · $categoryLabel' : 'Total',
           style: theme.textTheme.bodySmall?.copyWith(
             color: theme.colorScheme.onSurfaceVariant,
             fontWeight: FontWeight.w400,
@@ -381,10 +421,62 @@ class _WeekTotalHeader extends StatelessWidget {
           style: theme.textTheme.headlineLarge?.copyWith(
             fontWeight: FontWeight.w700,
             letterSpacing: -0.5,
-            color: theme.colorScheme.onSurface,
+            color: filtered
+                ? theme.colorScheme.primary
+                : theme.colorScheme.onSurface,
           ),
         ),
       ],
+    );
+  }
+}
+
+class _CategoryFilterBanner extends StatelessWidget {
+  const _CategoryFilterBanner({
+    required this.categoryLabel,
+    required this.onClear,
+  });
+
+  final String categoryLabel;
+  final VoidCallback onClear;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+
+    return Material(
+      color: scheme.primaryContainer.withValues(alpha: 0.45),
+      borderRadius: BorderRadius.circular(12),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+        child: Row(
+          children: [
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.only(left: 12),
+                child: Text(
+                  'Showing $categoryLabel only',
+                  style: theme.textTheme.labelLarge?.copyWith(
+                    color: scheme.onPrimaryContainer,
+                  ),
+                ),
+              ),
+            ),
+            TextButton(
+              onPressed: onClear,
+              style: TextButton.styleFrom(
+                minimumSize: const Size(48, 48),
+                tapTargetSize: MaterialTapTargetSize.padded,
+              ),
+              child: Text(
+                'Clear',
+                style: TextStyle(color: scheme.primary),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -653,9 +745,30 @@ List<Color> _pieChartColors(ColorScheme scheme, int count) {
 }
 
 class _CategoryExpensePieChart extends StatelessWidget {
-  const _CategoryExpensePieChart({required this.summary});
+  const _CategoryExpensePieChart({
+    required this.summary,
+    required this.selectedCategory,
+    required this.onCategorySelected,
+  });
 
   final DashboardExpenseSummary summary;
+  final String? selectedCategory;
+  final ValueChanged<String> onCategorySelected;
+
+  void _onPieTouch(
+    FlTouchEvent event,
+    PieTouchResponse? response,
+    List<CategoryExpenseTotal> totals,
+  ) {
+    if (!event.isInterestedForInteractions || response == null) {
+      return;
+    }
+    final index = response.touchedSection?.touchedSectionIndex;
+    if (index == null || index < 0 || index >= totals.length) {
+      return;
+    }
+    onCategorySelected(totals[index].label);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -680,50 +793,89 @@ class _CategoryExpensePieChart extends StatelessWidget {
 
     final colors = _pieChartColors(theme.colorScheme, totals.length);
     final currency = NumberFormat.currency(symbol: r'', decimalDigits: 0);
+    final scheme = theme.colorScheme;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        SizedBox(
-          width: double.infinity,
-          height: 220,
-          child: PieChart(
-            PieChartData(
-              sectionsSpace: 2,
-              centerSpaceRadius: 44,
-              pieTouchData: PieTouchData(enabled: true),
-              sections: [
-                for (var i = 0; i < totals.length; i++)
-                  PieChartSectionData(
-                    value: totals[i].total,
-                    color: colors[i],
-                    radius: 52,
-                    showTitle: totals[i].total / grandTotal >= 0.08,
-                    title:
-                        '${(totals[i].total / grandTotal * 100).round()}%',
-                    titleStyle: theme.textTheme.labelSmall?.copyWith(
-                      color: theme.colorScheme.onPrimary,
-                      fontWeight: FontWeight.w600,
+        Semantics(
+          label: 'Expense breakdown by category. Tap a slice to filter.',
+          child: SizedBox(
+            width: double.infinity,
+            height: 220,
+            child: PieChart(
+              PieChartData(
+                sectionsSpace: 2,
+                centerSpaceRadius: 44,
+                pieTouchData: PieTouchData(
+                  enabled: true,
+                  touchCallback: (event, response) =>
+                      _onPieTouch(event, response, totals),
+                ),
+                sections: [
+                  for (var i = 0; i < totals.length; i++)
+                    _pieSection(
+                      theme: theme,
+                      scheme: scheme,
+                      entry: totals[i],
+                      color: colors[i],
+                      grandTotal: grandTotal,
+                      selected: totals[i].label == selectedCategory,
+                      dimmed:
+                          selectedCategory != null &&
+                          totals[i].label != selectedCategory,
                     ),
-                  ),
-              ],
+                ],
+              ),
             ),
           ),
         ),
         const SizedBox(height: 8),
         Wrap(
-          spacing: 16,
-          runSpacing: 10,
+          spacing: 8,
+          runSpacing: 4,
           children: [
             for (var i = 0; i < totals.length; i++)
               _CategoryLegendChip(
                 color: colors[i],
                 label: totals[i].label,
                 amount: currency.format(totals[i].total),
+                selected: totals[i].label == selectedCategory,
+                onTap: () => onCategorySelected(totals[i].label),
               ),
           ],
         ),
       ],
+    );
+  }
+
+  PieChartSectionData _pieSection({
+    required ThemeData theme,
+    required ColorScheme scheme,
+    required CategoryExpenseTotal entry,
+    required Color color,
+    required double grandTotal,
+    required bool selected,
+    required bool dimmed,
+  }) {
+    final share = entry.total / grandTotal;
+    final baseRadius = 52.0;
+    final radius = selected ? baseRadius + 6 : baseRadius;
+    final sectionColor = dimmed ? color.withValues(alpha: 0.35) : color;
+
+    return PieChartSectionData(
+      value: entry.total,
+      color: sectionColor,
+      radius: radius,
+      showTitle: share >= 0.08,
+      title: '${(share * 100).round()}%',
+      titleStyle: theme.textTheme.labelSmall?.copyWith(
+        color: scheme.onPrimary,
+        fontWeight: FontWeight.w600,
+      ),
+      borderSide: selected
+          ? BorderSide(color: scheme.onSurface, width: 2.5)
+          : BorderSide.none,
     );
   }
 }
@@ -733,32 +885,53 @@ class _CategoryLegendChip extends StatelessWidget {
     required this.color,
     required this.label,
     required this.amount,
+    required this.selected,
+    required this.onTap,
   });
 
   final Color color;
   final String label;
   final String amount;
+  final bool selected;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
 
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Container(
-          width: 12,
-          height: 12,
-          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-        ),
-        const SizedBox(width: 8),
-        Text(
-          '$label · $amount',
-          style: theme.textTheme.labelMedium?.copyWith(
-            color: theme.colorScheme.onSurfaceVariant,
+    return Material(
+      color: selected
+          ? scheme.primaryContainer.withValues(alpha: 0.55)
+          : Colors.transparent,
+      borderRadius: BorderRadius.circular(20),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(20),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 12,
+                height: 12,
+                decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                '$label · $amount',
+                style: theme.textTheme.labelMedium?.copyWith(
+                  color: selected
+                      ? scheme.onPrimaryContainer
+                      : scheme.onSurfaceVariant,
+                  fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+                ),
+              ),
+            ],
           ),
         ),
-      ],
+      ),
     );
   }
 }

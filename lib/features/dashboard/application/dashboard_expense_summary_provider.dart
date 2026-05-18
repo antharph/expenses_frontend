@@ -34,6 +34,7 @@ class DashboardExpenseSummary {
     required this.weekTotal,
     required this.dailyTotals,
     required this.categoryTotals,
+    required this.categoryDailyTotals,
     required this.startDate,
     required this.endDate,
   });
@@ -43,8 +44,35 @@ class DashboardExpenseSummary {
   final double weekTotal;
   final List<DailyExpenseTotal> dailyTotals;
   final List<CategoryExpenseTotal> categoryTotals;
+
+  /// Per-category daily bars (same day order as [dailyTotals]).
+  final Map<String, List<DailyExpenseTotal>> categoryDailyTotals;
   final DateTime startDate;
   final DateTime endDate;
+
+  /// Bar chart + total for [categoryLabel], or the full week when [categoryLabel] is null.
+  DashboardExpenseSummary filteredView({String? categoryLabel}) {
+    if (categoryLabel == null) {
+      return this;
+    }
+    final daily = categoryDailyTotals[categoryLabel];
+    if (daily == null) {
+      return this;
+    }
+    final categoryTotal = categoryTotals
+        .where((c) => c.label == categoryLabel)
+        .fold<double>(0, (_, c) => c.total);
+    return DashboardExpenseSummary(
+      year: year,
+      week: week,
+      weekTotal: categoryTotal,
+      dailyTotals: daily,
+      categoryTotals: categoryTotals,
+      categoryDailyTotals: categoryDailyTotals,
+      startDate: startDate,
+      endDate: endDate,
+    );
+  }
 }
 
 const String kNoCategoryLabel = 'No Category';
@@ -61,6 +89,12 @@ String expenseCategoryLabel(Expense expense) {
 final dashboardSelectedWeekProvider = StateProvider<ExpenseWeekKey>((ref) {
   return ExpenseWeek.weekContaining(DateTime.now());
 });
+
+/// Active pie-chart category filter for a given week (null = show all).
+final dashboardCategoryFilterProvider =
+    StateProvider.autoDispose.family<String?, ExpenseWeekKey>(
+  (ref, weekKey) => null,
+);
 
 final dashboardExpenseSummaryProvider = FutureProvider.autoDispose
     .family<DashboardExpenseSummary, ExpenseWeekKey>((ref, weekKey) async {
@@ -82,23 +116,22 @@ DashboardExpenseSummary _emptySummaryForWeek(ExpenseWeekKey weekKey) {
     weekKey.week,
   );
 
+  final emptyDaily = _dailyTotalsForDays(
+    days: days,
+    amountsByDay: const {},
+    today: today,
+    isCurrentWeek: isCurrentWeek,
+  );
+
   return DashboardExpenseSummary(
     year: weekKey.year,
     week: weekKey.week,
     weekTotal: 0,
     startDate: days.first,
     endDate: days.last,
-    dailyTotals: days
-        .map(
-          (d) => DailyExpenseTotal(
-            day: d,
-            total: 0,
-            isToday: _sameCalendarDay(d, today),
-            isFuturePlaceholder: isCurrentWeek && d.isAfter(today),
-          ),
-        )
-        .toList(),
+    dailyTotals: emptyDaily,
     categoryTotals: const [],
+    categoryDailyTotals: const {},
   );
 }
 
@@ -123,6 +156,7 @@ Future<DashboardExpenseSummary> _loadWeekSummary(
   final days = ExpenseWeek.daysInWeek(weekKey.year, weekKey.week);
   final byDay = {for (final d in days) d: 0.0};
   final byCategory = <String, double>{};
+  final byCategoryDay = <String, Map<DateTime, double>>{};
 
   final rawList = body['data'];
   final list = rawList is List<dynamic> ? rawList : const <dynamic>[];
@@ -140,18 +174,26 @@ Future<DashboardExpenseSummary> _loadWeekSummary(
 
     final label = expenseCategoryLabel(e);
     byCategory[label] = (byCategory[label] ?? 0) + amount;
+    final categoryDays = byCategoryDay.putIfAbsent(label, () => {});
+    categoryDays[day] = (categoryDays[day] ?? 0) + amount;
   }
 
-  final dailyTotals = days
-      .map(
-        (d) => DailyExpenseTotal(
-          day: d,
-          total: byDay[d] ?? 0,
-          isToday: _sameCalendarDay(d, today),
-          isFuturePlaceholder: isCurrentWeek && d.isAfter(today),
-        ),
-      )
-      .toList();
+  final dailyTotals = _dailyTotalsForDays(
+    days: days,
+    amountsByDay: byDay,
+    today: today,
+    isCurrentWeek: isCurrentWeek,
+  );
+
+  final categoryDailyTotals = {
+    for (final entry in byCategoryDay.entries)
+      entry.key: _dailyTotalsForDays(
+        days: days,
+        amountsByDay: entry.value,
+        today: today,
+        isCurrentWeek: isCurrentWeek,
+      ),
+  };
 
   final categoryTotals = byCategory.entries
       .map((e) => CategoryExpenseTotal(label: e.key, total: e.value))
@@ -176,7 +218,26 @@ Future<DashboardExpenseSummary> _loadWeekSummary(
     endDate: endDate,
     dailyTotals: dailyTotals,
     categoryTotals: categoryTotals,
+    categoryDailyTotals: categoryDailyTotals,
   );
+}
+
+List<DailyExpenseTotal> _dailyTotalsForDays({
+  required List<DateTime> days,
+  required Map<DateTime, double> amountsByDay,
+  required DateTime today,
+  required bool isCurrentWeek,
+}) {
+  return days
+      .map(
+        (d) => DailyExpenseTotal(
+          day: d,
+          total: amountsByDay[d] ?? 0,
+          isToday: _sameCalendarDay(d, today),
+          isFuturePlaceholder: isCurrentWeek && d.isAfter(today),
+        ),
+      )
+      .toList();
 }
 
 bool _sameCalendarDay(DateTime a, DateTime b) =>
