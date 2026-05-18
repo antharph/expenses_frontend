@@ -55,6 +55,18 @@ class ExpensesApi {
     return response.data ?? <String, dynamic>{};
   }
 
+  Future<Map<String, dynamic>> weeklyExpenses({
+    required String token,
+    required int year,
+    required int week,
+  }) async {
+    final client = _jsonClient(token);
+    final response = await client.get<Map<String, dynamic>>(
+      '/api/v1/expenses/y/$year/w/$week',
+    );
+    return response.data ?? <String, dynamic>{};
+  }
+
   Future<List<ExpenseCategory>> listCategories({required String token}) async {
     final client = _jsonClient(token);
     final response = await client.get<Map<String, dynamic>>('/api/v1/categories');

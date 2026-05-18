@@ -8,6 +8,7 @@ import 'package:intl/intl.dart';
 import '../auth/application/auth_page.dart';
 import '../auth/application/session_notifier.dart';
 import 'application/dashboard_expense_summary_provider.dart';
+import 'domain/expense_week.dart';
 import '../expenses/presentation/expenses_screen.dart';
 
 /// Ceiling for bar chart axis only (not data).
@@ -213,13 +214,51 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
 /// Shared horizontal inset so section headers and chart copy line up visually.
 const double _kDashboardContentGutter = 24;
 
-class _DashboardHome extends ConsumerWidget {
+class _DashboardHome extends ConsumerStatefulWidget {
   const _DashboardHome();
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final summaryAsync = ref.watch(dashboardExpenseSummaryProvider);
+  ConsumerState<_DashboardHome> createState() => _DashboardHomeState();
+}
+
+class _DashboardHomeState extends ConsumerState<_DashboardHome> {
+  late final PageController _weekPageController;
+
+  @override
+  void initState() {
+    super.initState();
+    _weekPageController = PageController(initialPage: 1);
+  }
+
+  @override
+  void dispose() {
+    _weekPageController.dispose();
+    super.dispose();
+  }
+
+  void _onWeekPageChanged(int index) {
+    if (index == 1) {
+      return;
+    }
+    final selected = ref.read(dashboardSelectedWeekProvider);
+    final target = index == 0
+        ? ExpenseWeek.previous(selected.year, selected.week)
+        : ExpenseWeek.next(selected.year, selected.week);
+    ref.read(dashboardSelectedWeekProvider.notifier).state = target;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_weekPageController.hasClients) {
+        return;
+      }
+      _weekPageController.jumpToPage(1);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
     const topPad = 12.0;
+    final selected = ref.watch(dashboardSelectedWeekProvider);
+    final previous = ExpenseWeek.previous(selected.year, selected.week);
+    final next = ExpenseWeek.next(selected.year, selected.week);
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(
@@ -228,67 +267,95 @@ class _DashboardHome extends ConsumerWidget {
         _kDashboardContentGutter,
         _kDashboardContentGutter,
       ),
-      child: summaryAsync.when(
-        data: (summary) => SingleChildScrollView(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _TodayTotalHeader(total: summary.todayTotal),
-              const SizedBox(height: 40),
-              Text(
-                'Last 7 days',
-                style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-              const SizedBox(height: 12),
-              SizedBox(
-                width: double.infinity,
-                height: 240,
-                child: _DailyExpenseBarChart(summary: summary),
-              ),
-              const SizedBox(height: 40),
-              Text(
-                'By category',
-                style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-              const SizedBox(height: 12),
-              _CategoryExpensePieChart(summary: summary),
-            ],
+      child: PageView(
+        controller: _weekPageController,
+        onPageChanged: _onWeekPageChanged,
+        children: [
+          _WeekDashboardPage(
+            key: ValueKey('week-${previous.year}-${previous.week}'),
+            weekKey: previous,
           ),
+          _WeekDashboardPage(
+            key: ValueKey('week-${selected.year}-${selected.week}'),
+            weekKey: selected,
+          ),
+          _WeekDashboardPage(
+            key: ValueKey('week-${next.year}-${next.week}'),
+            weekKey: next,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _WeekDashboardPage extends ConsumerWidget {
+  const _WeekDashboardPage({super.key, required this.weekKey});
+
+  final ExpenseWeekKey weekKey;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final summaryAsync = ref.watch(dashboardExpenseSummaryProvider(weekKey));
+
+    return summaryAsync.when(
+      data: (summary) => SingleChildScrollView(
+        physics: const ClampingScrollPhysics(),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _WeekTotalHeader(total: summary.weekTotal),
+            const SizedBox(height: 40),
+            _WeekRangeSubtitle(
+              startDate: summary.startDate,
+              endDate: summary.endDate,
+            ),
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              height: 248,
+              child: _DailyExpenseBarChart(summary: summary),
+            ),
+            const SizedBox(height: 40),
+            Text(
+              'By category',
+              style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+            const SizedBox(height: 12),
+            _CategoryExpensePieChart(summary: summary),
+          ],
         ),
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (error, stackTrace) => Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                error.toString(),
-                textAlign: TextAlign.center,
-                style: Theme.of(context).textTheme.bodyMedium,
-              ),
-              const SizedBox(height: 16),
-              FilledButton.icon(
-                onPressed: () {
-                  ref.invalidate(dashboardExpenseSummaryProvider);
-                },
-                icon: const Icon(Icons.refresh),
-                label: const Text('Retry'),
-              ),
-            ],
-          ),
+      ),
+      loading: () => const Center(child: CircularProgressIndicator()),
+      error: (error, stackTrace) => Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              error.toString(),
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.bodyMedium,
+            ),
+            const SizedBox(height: 16),
+            FilledButton.icon(
+              onPressed: () {
+                ref.invalidate(dashboardExpenseSummaryProvider(weekKey));
+              },
+              icon: const Icon(Icons.refresh),
+              label: const Text('Retry'),
+            ),
+          ],
         ),
       ),
     );
   }
 }
 
-class _TodayTotalHeader extends StatelessWidget {
-  const _TodayTotalHeader({required this.total});
+class _WeekTotalHeader extends StatelessWidget {
+  const _WeekTotalHeader({required this.total});
 
   final double total;
 
@@ -301,7 +368,7 @@ class _TodayTotalHeader extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          "Today's total",
+          'Total',
           style: theme.textTheme.bodySmall?.copyWith(
             color: theme.colorScheme.onSurfaceVariant,
             fontWeight: FontWeight.w400,
@@ -322,6 +389,42 @@ class _TodayTotalHeader extends StatelessWidget {
   }
 }
 
+class _WeekRangeSubtitle extends StatelessWidget {
+  const _WeekRangeSubtitle({
+    required this.startDate,
+    required this.endDate,
+  });
+
+  final DateTime startDate;
+  final DateTime endDate;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final range = '${DateFormat.MMMd().format(startDate)} – '
+        '${DateFormat.MMMd().format(endDate)}';
+
+    return Row(
+      children: [
+        Expanded(
+          child: Text(
+            range,
+            style: theme.textTheme.titleSmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ),
+        Icon(
+          Icons.swipe_rounded,
+          size: 18,
+          color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.65),
+        ),
+      ],
+    );
+  }
+}
+
 class _DailyExpenseBarChart extends StatelessWidget {
   const _DailyExpenseBarChart({required this.summary});
 
@@ -329,15 +432,22 @@ class _DailyExpenseBarChart extends StatelessWidget {
 
   static const _gridDivisions = 3;
 
+  static const double _futurePlaceholderFraction = 0.045;
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final totals = summary.dailyTotals.map((e) => e.total).toList();
+    final totals = summary.dailyTotals
+        .where((e) => !e.isFuturePlaceholder)
+        .map((e) => e.total)
+        .toList();
     final maxExpense = totals.isEmpty ? 0.0 : totals.reduce(math.max);
     final chartMaxY = maxExpense <= 0 ? 1.0 : _niceChartCeiling(maxExpense);
     final horizontalInterval = chartMaxY / _gridDivisions;
+    final placeholderY = chartMaxY * _futurePlaceholderFraction;
 
     final dayLabels = DateFormat.E();
+    final scheme = theme.colorScheme;
 
     return BarChart(
       BarChartData(
@@ -363,6 +473,9 @@ class _DailyExpenseBarChart extends StatelessWidget {
                 return null;
               }
               final d = summary.dailyTotals[i];
+              if (d.isFuturePlaceholder) {
+                return null;
+              }
               final currency = NumberFormat.currency(
                 symbol: r'',
                 decimalDigits: 2,
@@ -418,36 +531,50 @@ class _DailyExpenseBarChart extends StatelessWidget {
           bottomTitles: AxisTitles(
             sideTitles: SideTitles(
               showTitles: true,
-              reservedSize: 28,
+              reservedSize: 40,
               getTitlesWidget: (value, meta) {
                 final i = value.toInt();
                 if (i < 0 || i >= summary.dailyTotals.length) {
                   return const SizedBox.shrink();
                 }
-                final d = summary.dailyTotals[i].day;
-                final now = DateTime.now();
-                final isToday =
-                    d.year == now.year &&
-                    d.month == now.month &&
-                    d.day == now.day;
+                final entry = summary.dailyTotals[i];
+                final d = entry.day;
+                final isToday = entry.isToday;
 
                 final labelStyle = theme.textTheme.labelSmall?.copyWith(
                   fontWeight: isToday ? FontWeight.w600 : FontWeight.w400,
                   color: isToday
-                      ? theme.colorScheme.primary
-                      : theme.colorScheme.onSurfaceVariant,
+                      ? scheme.primary
+                      : scheme.onSurfaceVariant,
                 );
 
                 return SideTitleWidget(
                   meta: meta,
                   space: 0,
-                  child: Padding(
-                    padding: const EdgeInsets.only(top: 10),
-                    child: Text(
-                      dayLabels.format(d),
-                      style: labelStyle,
-                      textAlign: TextAlign.center,
-                    ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        dayLabels.format(d),
+                        style: labelStyle,
+                        textAlign: TextAlign.center,
+                      ),
+                      SizedBox(
+                        height: isToday ? 6 : 0,
+                        child: isToday
+                            ? Center(
+                                child: Container(
+                                  width: 4,
+                                  height: 4,
+                                  decoration: BoxDecoration(
+                                    color: scheme.primary,
+                                    shape: BoxShape.circle,
+                                  ),
+                                ),
+                              )
+                            : null,
+                      ),
+                    ],
                   ),
                 );
               },
@@ -474,22 +601,35 @@ class _DailyExpenseBarChart extends StatelessWidget {
           ),
         ),
         borderData: FlBorderData(show: false),
-        barGroups: [
-          for (var i = 0; i < summary.dailyTotals.length; i++)
-            BarChartGroupData(
-              x: i,
-              barRods: [
-                BarChartRodData(
-                  toY: summary.dailyTotals[i].total,
-                  width: 18,
-                  borderRadius: const BorderRadius.vertical(
-                    top: Radius.circular(4),
-                  ),
-                  color: theme.colorScheme.primary,
+        barGroups: List.generate(summary.dailyTotals.length, (i) {
+          final entry = summary.dailyTotals[i];
+          final isFuture = entry.isFuturePlaceholder;
+          final isToday = entry.isToday;
+          final rodY = isFuture
+              ? placeholderY
+              : entry.total <= 0
+              ? 0.0
+              : entry.total;
+          final rodColor = isFuture
+              ? scheme.outlineVariant.withValues(alpha: 0.35)
+              : isToday
+              ? scheme.tertiary
+              : scheme.primary;
+
+          return BarChartGroupData(
+            x: i,
+            barRods: [
+              BarChartRodData(
+                toY: rodY,
+                width: 18,
+                borderRadius: const BorderRadius.vertical(
+                  top: Radius.circular(4),
                 ),
-              ],
-            ),
-        ],
+                color: rodColor,
+              ),
+            ],
+          );
+        }),
       ),
     );
   }
@@ -529,7 +669,7 @@ class _CategoryExpensePieChart extends StatelessWidget {
         height: 200,
         child: Center(
           child: Text(
-            'No expenses in the last 7 days',
+            'No expenses this week',
             style: theme.textTheme.bodyMedium?.copyWith(
               color: theme.colorScheme.onSurfaceVariant,
             ),

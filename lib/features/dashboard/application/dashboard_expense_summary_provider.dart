@@ -4,12 +4,20 @@ import '../../auth/application/session_notifier.dart';
 import '../../expenses/data/expenses_api.dart';
 import '../../expenses/domain/expense.dart';
 import '../../expenses/domain/expense_date.dart';
+import '../domain/expense_week.dart';
 
 class DailyExpenseTotal {
-  const DailyExpenseTotal({required this.day, required this.total});
+  const DailyExpenseTotal({
+    required this.day,
+    required this.total,
+    this.isToday = false,
+    this.isFuturePlaceholder = false,
+  });
 
   final DateTime day;
   final double total;
+  final bool isToday;
+  final bool isFuturePlaceholder;
 }
 
 class CategoryExpenseTotal {
@@ -21,14 +29,22 @@ class CategoryExpenseTotal {
 
 class DashboardExpenseSummary {
   const DashboardExpenseSummary({
-    required this.todayTotal,
+    required this.year,
+    required this.week,
+    required this.weekTotal,
     required this.dailyTotals,
     required this.categoryTotals,
+    required this.startDate,
+    required this.endDate,
   });
 
-  final double todayTotal;
+  final int year;
+  final int week;
+  final double weekTotal;
   final List<DailyExpenseTotal> dailyTotals;
   final List<CategoryExpenseTotal> categoryTotals;
+  final DateTime startDate;
+  final DateTime endDate;
 }
 
 const String kNoCategoryLabel = 'No Category';
@@ -41,80 +57,82 @@ String expenseCategoryLabel(Expense expense) {
   return kNoCategoryLabel;
 }
 
-final dashboardExpenseSummaryProvider =
-    FutureProvider.autoDispose<DashboardExpenseSummary>((ref) async {
+/// Visible week on the dashboard (swipe updates this).
+final dashboardSelectedWeekProvider = StateProvider<ExpenseWeekKey>((ref) {
+  return ExpenseWeek.weekContaining(DateTime.now());
+});
+
+final dashboardExpenseSummaryProvider = FutureProvider.autoDispose
+    .family<DashboardExpenseSummary, ExpenseWeekKey>((ref, weekKey) async {
       final token = ref.watch(sessionProvider).valueOrNull?.token;
       if (token == null) {
-        return _emptySummaryForLocalToday();
+        return _emptySummaryForWeek(weekKey);
       }
 
       final api = ref.watch(expensesApiProvider);
-      return _loadSummary(api, token);
+      return _loadWeekSummary(api, token, weekKey);
     });
 
-DashboardExpenseSummary _emptySummaryForLocalToday() {
+DashboardExpenseSummary _emptySummaryForWeek(ExpenseWeekKey weekKey) {
+  final days = ExpenseWeek.daysInWeek(weekKey.year, weekKey.week);
   final now = DateTime.now();
   final today = DateTime(now.year, now.month, now.day);
-  final rangeStart = today.subtract(const Duration(days: 6));
+  final isCurrentWeek = ExpenseWeek.isCurrentCalendarWeek(
+    weekKey.year,
+    weekKey.week,
+  );
+
   return DashboardExpenseSummary(
-    todayTotal: 0,
-    dailyTotals: List.generate(
-      7,
-      (i) =>
-          DailyExpenseTotal(day: rangeStart.add(Duration(days: i)), total: 0),
-    ),
+    year: weekKey.year,
+    week: weekKey.week,
+    weekTotal: 0,
+    startDate: days.first,
+    endDate: days.last,
+    dailyTotals: days
+        .map(
+          (d) => DailyExpenseTotal(
+            day: d,
+            total: 0,
+            isToday: _sameCalendarDay(d, today),
+            isFuturePlaceholder: isCurrentWeek && d.isAfter(today),
+          ),
+        )
+        .toList(),
     categoryTotals: const [],
   );
 }
 
-Future<DashboardExpenseSummary> _loadSummary(
+Future<DashboardExpenseSummary> _loadWeekSummary(
   ExpensesApi api,
   String token,
+  ExpenseWeekKey weekKey,
 ) async {
+  final body = await api.weeklyExpenses(
+    token: token,
+    year: weekKey.year,
+    week: weekKey.week,
+  );
+
   final now = DateTime.now();
   final today = DateTime(now.year, now.month, now.day);
-  final rangeStart = today.subtract(const Duration(days: 6));
+  final isCurrentWeek = ExpenseWeek.isCurrentCalendarWeek(
+    weekKey.year,
+    weekKey.week,
+  );
 
-  final accumulated = <Expense>[];
-  var page = 1;
-  var hasMore = true;
-
-  while (hasMore) {
-    final body = await api.listExpenses(token: token, page: page);
-    final parsed = _parsePage(body);
-    accumulated.addAll(parsed.items);
-
-    DateTime? minDayOnPage;
-    for (final e in parsed.items) {
-      final day = expenseLocalDay(e.dateIso, referenceNow: now);
-      if (day != null && (minDayOnPage == null || day.isBefore(minDayOnPage))) {
-        minDayOnPage = day;
-      }
-    }
-
-    hasMore = parsed.hasMore;
-    if (!hasMore) {
-      break;
-    }
-    if (minDayOnPage != null && minDayOnPage.isBefore(rangeStart)) {
-      break;
-    }
-    page++;
-  }
-
-  final byDay = <DateTime, double>{};
-  for (var i = 0; i < 7; i++) {
-    byDay[rangeStart.add(Duration(days: i))] = 0;
-  }
-
+  final days = ExpenseWeek.daysInWeek(weekKey.year, weekKey.week);
+  final byDay = {for (final d in days) d: 0.0};
   final byCategory = <String, double>{};
 
-  for (final e in accumulated) {
+  final rawList = body['data'];
+  final list = rawList is List<dynamic> ? rawList : const <dynamic>[];
+  final expenses = list
+      .map((e) => Expense.fromJson(Map<String, dynamic>.from(e as Map)))
+      .toList();
+
+  for (final e in expenses) {
     final day = expenseLocalDay(e.dateIso, referenceNow: now);
-    if (day == null) {
-      continue;
-    }
-    if (day.isBefore(rangeStart) || day.isAfter(today)) {
+    if (day == null || !byDay.containsKey(day)) {
       continue;
     }
     final amount = double.tryParse(e.total) ?? 0;
@@ -124,56 +142,53 @@ Future<DashboardExpenseSummary> _loadSummary(
     byCategory[label] = (byCategory[label] ?? 0) + amount;
   }
 
-  final dailyTotals = List<DailyExpenseTotal>.generate(7, (i) {
-    final d = rangeStart.add(Duration(days: i));
-    return DailyExpenseTotal(day: d, total: byDay[d] ?? 0);
-  });
+  final dailyTotals = days
+      .map(
+        (d) => DailyExpenseTotal(
+          day: d,
+          total: byDay[d] ?? 0,
+          isToday: _sameCalendarDay(d, today),
+          isFuturePlaceholder: isCurrentWeek && d.isAfter(today),
+        ),
+      )
+      .toList();
 
   final categoryTotals = byCategory.entries
       .map((e) => CategoryExpenseTotal(label: e.key, total: e.value))
       .toList()
     ..sort((a, b) => b.total.compareTo(a.total));
 
+  final meta = body['meta'];
+  var weekTotal = 0.0;
+  DateTime startDate = days.first;
+  DateTime endDate = days.last;
+  if (meta is Map<String, dynamic>) {
+    weekTotal = double.tryParse(meta['sum_total']?.toString() ?? '') ?? 0;
+    startDate = _parseMetaDate(meta['start_date']) ?? startDate;
+    endDate = _parseMetaDate(meta['end_date']) ?? endDate;
+  }
+
   return DashboardExpenseSummary(
-    todayTotal: byDay[today] ?? 0,
+    year: weekKey.year,
+    week: weekKey.week,
+    weekTotal: weekTotal,
+    startDate: startDate,
+    endDate: endDate,
     dailyTotals: dailyTotals,
     categoryTotals: categoryTotals,
   );
 }
 
-class _ParsedPage {
-  _ParsedPage({required this.items, required this.hasMore});
+bool _sameCalendarDay(DateTime a, DateTime b) =>
+    a.year == b.year && a.month == b.month && a.day == b.day;
 
-  final List<Expense> items;
-  final bool hasMore;
-}
-
-_ParsedPage _parsePage(Map<String, dynamic> body) {
-  final rawList = body['data'];
-  final list = rawList is List<dynamic> ? rawList : const <dynamic>[];
-  final items = list
-      .map((e) => Expense.fromJson(Map<String, dynamic>.from(e as Map)))
-      .toList();
-
-  final meta = body['meta'];
-  var hasMore = false;
-  if (meta is Map<String, dynamic>) {
-    final current = _asInt(meta['current_page']);
-    final last = _asInt(meta['last_page']);
-    if (current != null && last != null) {
-      hasMore = current < last;
-    }
+DateTime? _parseMetaDate(Object? raw) {
+  if (raw == null) {
+    return null;
   }
-
-  return _ParsedPage(items: items, hasMore: hasMore);
-}
-
-int? _asInt(Object? value) {
-  if (value is int) {
-    return value;
+  final parsed = DateTime.tryParse(raw.toString());
+  if (parsed == null) {
+    return null;
   }
-  if (value is num) {
-    return value.toInt();
-  }
-  return int.tryParse(value?.toString() ?? '');
+  return DateTime(parsed.year, parsed.month, parsed.day);
 }
