@@ -91,8 +91,12 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen> {
     final list = ref.watch(expensesListProvider);
     final filtered = list.filteredItems;
     final showLoadMore = list.hasMore;
-    final itemCount =
-        filtered.length + (showLoadMore ? 1 : 0) + (filtered.isNotEmpty ? 1 : 0);
+    final itemCount = filtered.length + (showLoadMore ? 1 : 0);
+    final showSummaryBar =
+        list.isLoadingInitial ||
+        filtered.isNotEmpty ||
+        (list.hasAggregateSummary &&
+            (list.hasDateFilter || (list.aggregateTotalCount ?? 0) > 0));
 
     ref.listen<ExpensesListState>(expensesListProvider, (previous, next) {
       final msg = next.initialError;
@@ -137,6 +141,16 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen> {
                 ? () => ref.read(expensesListProvider.notifier).clearDateRange()
                 : null,
           ),
+          if (showSummaryBar)
+            _ExpensesSummaryBar(
+              hasDateFilter: list.hasDateFilter,
+              rangeStart: list.dateRangeStart,
+              rangeEnd: list.dateRangeEnd,
+              isLoading: list.isLoadingInitial && !list.hasAggregateSummary,
+              totalCount: list.aggregateTotalCount,
+              sumTotal: list.aggregateSumTotal,
+              loadedCount: filtered.length,
+            ),
           Expanded(
             child: list.isLoadingInitial && list.items.isEmpty
                 ? const Center(child: CircularProgressIndicator())
@@ -195,10 +209,6 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen> {
                               expense: filtered[index],
                               formatDate: _formatDate,
                             );
-                          }
-
-                          if (index == filtered.length) {
-                            return _ExpensesTotalFooter(total: list.filteredTotal);
                           }
 
                           return _LoadMoreFooter(
@@ -338,6 +348,111 @@ class _DateField extends StatelessWidget {
   }
 }
 
+class _ExpensesSummaryBar extends StatelessWidget {
+  const _ExpensesSummaryBar({
+    required this.hasDateFilter,
+    required this.rangeStart,
+    required this.rangeEnd,
+    required this.isLoading,
+    required this.totalCount,
+    required this.sumTotal,
+    required this.loadedCount,
+  });
+
+  final bool hasDateFilter;
+  final DateTime? rangeStart;
+  final DateTime? rangeEnd;
+  final bool isLoading;
+  final int? totalCount;
+  final double? sumTotal;
+  final int loadedCount;
+
+  static final _rangeFormat = DateFormat.yMMMd();
+  static final _currency = NumberFormat.currency(symbol: r'$', decimalDigits: 2);
+
+  String _scopeLabel() {
+    if (hasDateFilter && rangeStart != null && rangeEnd != null) {
+      return '${_rangeFormat.format(rangeStart!)} – ${_rangeFormat.format(rangeEnd!)}';
+    }
+    return 'All expenses';
+  }
+
+  String _countLabel(int count) {
+    return count == 1 ? '1 expense' : '$count expenses';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+
+    return Material(
+      color: scheme.surfaceContainerHighest.withValues(alpha: 0.35),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+        child: isLoading
+            ? const SizedBox(
+                height: 52,
+                child: Center(
+                  child: SizedBox(
+                    width: 22,
+                    height: 22,
+                    child: CircularProgressIndicator(strokeWidth: 2.5),
+                  ),
+                ),
+              )
+            : Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(
+                    _scopeLabel(),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.labelLarge?.copyWith(
+                      color: scheme.onSurfaceVariant,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Row(
+                    children: [
+                      if (totalCount != null)
+                        Text(
+                          _countLabel(totalCount!),
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            color: scheme.onSurfaceVariant,
+                          ),
+                        ),
+                      const Spacer(),
+                      if (sumTotal != null)
+                        Text(
+                          _currency.format(sumTotal),
+                          style: theme.textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.w700,
+                            fontFeatures: const [FontFeature.tabularFigures()],
+                          ),
+                        ),
+                    ],
+                  ),
+                  if (totalCount != null &&
+                      loadedCount < totalCount! &&
+                      totalCount! > 0)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4),
+                      child: Text(
+                        'Showing $loadedCount of ${totalCount!}',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: scheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+      ),
+    );
+  }
+}
+
 class _LoadMoreFooter extends StatelessWidget {
   const _LoadMoreFooter({
     required this.isLoading,
@@ -362,51 +477,6 @@ class _LoadMoreFooter extends StatelessWidget {
                 onPressed: onShowMore,
                 child: const Text('Show more'),
               ),
-      ),
-    );
-  }
-}
-
-class _ExpensesTotalFooter extends StatelessWidget {
-  const _ExpensesTotalFooter({required this.total});
-
-  final double total;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
-    final currency = NumberFormat.currency(symbol: r'$', decimalDigits: 2);
-
-    return Padding(
-      padding: const EdgeInsets.only(top: 8, bottom: 16),
-      child: Material(
-        color: scheme.primaryContainer.withValues(alpha: 0.45),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
-          side: BorderSide(color: scheme.outlineVariant.withValues(alpha: 0.5)),
-        ),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-          child: Row(
-            children: [
-              Text(
-                'Total',
-                style: theme.textTheme.titleSmall?.copyWith(
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              const Spacer(),
-              Text(
-                currency.format(total),
-                style: theme.textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.w700,
-                  fontFeatures: const [FontFeature.tabularFigures()],
-                ),
-              ),
-            ],
-          ),
-        ),
       ),
     );
   }

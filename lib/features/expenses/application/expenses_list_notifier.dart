@@ -17,6 +17,8 @@ class ExpensesListState {
     this.loadedPage = 0,
     this.dateRangeStart,
     this.dateRangeEnd,
+    this.aggregateTotalCount,
+    this.aggregateSumTotal,
   });
 
   final List<Expense> items;
@@ -28,7 +30,16 @@ class ExpensesListState {
   final DateTime? dateRangeStart;
   final DateTime? dateRangeEnd;
 
+  /// Total matching expenses across all pages (`meta.total` from the API).
+  final int? aggregateTotalCount;
+
+  /// Sum of line totals for all matching expenses (`meta.sum_total` from the API).
+  final double? aggregateSumTotal;
+
   bool get hasDateFilter => dateRangeStart != null && dateRangeEnd != null;
+
+  bool get hasAggregateSummary =>
+      aggregateTotalCount != null && aggregateSumTotal != null;
 
   List<Expense> get filteredItems {
     if (!hasDateFilter) {
@@ -45,8 +56,6 @@ class ExpensesListState {
         .toList();
   }
 
-  double get filteredTotal => sumExpenseTotals(filteredItems);
-
   ExpensesListState copyWith({
     List<Expense>? items,
     bool? isLoadingInitial,
@@ -58,6 +67,9 @@ class ExpensesListState {
     DateTime? dateRangeStart,
     DateTime? dateRangeEnd,
     bool clearDateRange = false,
+    int? aggregateTotalCount,
+    double? aggregateSumTotal,
+    bool clearAggregates = false,
   }) {
     return ExpensesListState(
       items: items ?? this.items,
@@ -70,6 +82,12 @@ class ExpensesListState {
           ? null
           : (dateRangeStart ?? this.dateRangeStart),
       dateRangeEnd: clearDateRange ? null : (dateRangeEnd ?? this.dateRangeEnd),
+      aggregateTotalCount: clearAggregates
+          ? null
+          : (aggregateTotalCount ?? this.aggregateTotalCount),
+      aggregateSumTotal: clearAggregates
+          ? null
+          : (aggregateSumTotal ?? this.aggregateSumTotal),
     );
   }
 }
@@ -140,6 +158,7 @@ class ExpensesListNotifier extends Notifier<ExpensesListState> {
       items: const [],
       loadedPage: 0,
       hasMore: true,
+      clearAggregates: true,
     );
 
     try {
@@ -155,6 +174,8 @@ class ExpensesListNotifier extends Notifier<ExpensesListState> {
         items: parsed.items,
         hasMore: parsed.hasMore,
         loadedPage: 1,
+        aggregateTotalCount: parsed.aggregateTotalCount,
+        aggregateSumTotal: parsed.aggregateSumTotal,
       );
     } on DioException catch (e) {
       state = state.copyWith(
@@ -200,6 +221,8 @@ class ExpensesListNotifier extends Notifier<ExpensesListState> {
         items: parsed.items,
         hasMore: parsed.hasMore,
         loadedPage: nextPage,
+        aggregateTotalCount: parsed.aggregateTotalCount,
+        aggregateSumTotal: parsed.aggregateSumTotal,
       );
     } on DioException catch (e) {
       state = state.copyWith(isLoadingMore: false, initialError: formatApiError(e));
@@ -221,8 +244,21 @@ class ExpensesListNotifier extends Notifier<ExpensesListState> {
 
     try {
       await _api.deleteExpense(token: token, id: id);
+      final removed = state.items.where((e) => e.id == id).firstOrNull;
+      final removedAmount = removed != null
+          ? (double.tryParse(removed.total) ?? 0)
+          : 0.0;
+      final nextCount = state.aggregateTotalCount != null
+          ? (state.aggregateTotalCount! - 1).clamp(0, 1 << 30).toInt()
+          : null;
+      final nextSum = state.aggregateSumTotal != null
+          ? (state.aggregateSumTotal! - removedAmount).clamp(0.0, double.infinity)
+          : null;
+
       state = state.copyWith(
         items: state.items.where((e) => e.id != id).toList(),
+        aggregateTotalCount: nextCount,
+        aggregateSumTotal: nextSum,
       );
       return null;
     } on DioException catch (e) {
@@ -241,18 +277,34 @@ class ExpensesListNotifier extends Notifier<ExpensesListState> {
 
     final meta = body['meta'];
     var hasMore = false;
+    int? aggregateTotalCount;
+    double? aggregateSumTotal;
     if (meta is Map<String, dynamic>) {
       final current = _asInt(meta['current_page']);
       final last = _asInt(meta['last_page']);
       if (current != null && last != null) {
         hasMore = current < last;
       }
+      aggregateTotalCount = _asInt(meta['total']);
+      aggregateSumTotal = _parseSumTotal(meta['sum_total']);
     }
 
     return _ParsedPage(
       items: [...appendTo, ...newItems],
       hasMore: hasMore,
+      aggregateTotalCount: aggregateTotalCount,
+      aggregateSumTotal: aggregateSumTotal,
     );
+  }
+
+  double? _parseSumTotal(Object? value) {
+    if (value == null) {
+      return null;
+    }
+    if (value is num) {
+      return value.toDouble();
+    }
+    return double.tryParse(value.toString());
   }
 
   int? _asInt(Object? value) {
@@ -267,8 +319,15 @@ class ExpensesListNotifier extends Notifier<ExpensesListState> {
 }
 
 class _ParsedPage {
-  _ParsedPage({required this.items, required this.hasMore});
+  _ParsedPage({
+    required this.items,
+    required this.hasMore,
+    this.aggregateTotalCount,
+    this.aggregateSumTotal,
+  });
 
   final List<Expense> items;
   final bool hasMore;
+  final int? aggregateTotalCount;
+  final double? aggregateSumTotal;
 }
