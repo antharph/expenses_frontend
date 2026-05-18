@@ -37,11 +37,20 @@ class ExpensesApi {
   Future<Map<String, dynamic>> listExpenses({
     required String token,
     int page = 1,
+    String? from,
+    String? to,
   }) async {
     final client = _jsonClient(token);
+    final queryParameters = <String, dynamic>{'page': page};
+    if (from != null) {
+      queryParameters['from'] = from;
+    }
+    if (to != null) {
+      queryParameters['to'] = to;
+    }
     final response = await client.get<Map<String, dynamic>>(
       '/api/v1/expenses',
-      queryParameters: {'page': page},
+      queryParameters: queryParameters,
     );
     return response.data ?? <String, dynamic>{};
   }

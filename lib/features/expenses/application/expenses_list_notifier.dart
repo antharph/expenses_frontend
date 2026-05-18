@@ -5,6 +5,7 @@ import '../../../core/errors/api_errors.dart';
 import '../../auth/application/session_notifier.dart';
 import '../data/expenses_api.dart';
 import '../domain/expense.dart';
+import '../domain/expense_date.dart';
 
 class ExpensesListState {
   const ExpensesListState({
@@ -14,6 +15,8 @@ class ExpensesListState {
     this.initialError,
     this.hasMore = true,
     this.loadedPage = 0,
+    this.dateRangeStart,
+    this.dateRangeEnd,
   });
 
   final List<Expense> items;
@@ -22,6 +25,27 @@ class ExpensesListState {
   final String? initialError;
   final bool hasMore;
   final int loadedPage;
+  final DateTime? dateRangeStart;
+  final DateTime? dateRangeEnd;
+
+  bool get hasDateFilter => dateRangeStart != null && dateRangeEnd != null;
+
+  List<Expense> get filteredItems {
+    if (!hasDateFilter) {
+      return items;
+    }
+    return items
+        .where(
+          (e) => expenseMatchesDateRange(
+            e.dateIso,
+            rangeStart: dateRangeStart,
+            rangeEnd: dateRangeEnd,
+          ),
+        )
+        .toList();
+  }
+
+  double get filteredTotal => sumExpenseTotals(filteredItems);
 
   ExpensesListState copyWith({
     List<Expense>? items,
@@ -31,6 +55,9 @@ class ExpensesListState {
     bool clearInitialError = false,
     bool? hasMore,
     int? loadedPage,
+    DateTime? dateRangeStart,
+    DateTime? dateRangeEnd,
+    bool clearDateRange = false,
   }) {
     return ExpensesListState(
       items: items ?? this.items,
@@ -39,6 +66,10 @@ class ExpensesListState {
       initialError: clearInitialError ? null : (initialError ?? this.initialError),
       hasMore: hasMore ?? this.hasMore,
       loadedPage: loadedPage ?? this.loadedPage,
+      dateRangeStart: clearDateRange
+          ? null
+          : (dateRangeStart ?? this.dateRangeStart),
+      dateRangeEnd: clearDateRange ? null : (dateRangeEnd ?? this.dateRangeEnd),
     );
   }
 }
@@ -53,6 +84,46 @@ class ExpensesListNotifier extends Notifier<ExpensesListState> {
   ExpensesApi get _api => ref.read(expensesApiProvider);
 
   String? get _token => ref.read(sessionProvider).valueOrNull?.token;
+
+  void setDateRange({DateTime? start, DateTime? end, bool clear = false}) {
+    if (clear) {
+      state = state.copyWith(clearDateRange: true);
+      loadInitial();
+      return;
+    }
+
+    var newStart = start != null ? _dateOnly(start) : state.dateRangeStart;
+    var newEnd = end != null ? _dateOnly(end) : state.dateRangeEnd;
+    state = state.copyWith(dateRangeStart: newStart, dateRangeEnd: newEnd);
+
+    if (newStart == null || newEnd == null) {
+      return;
+    }
+    if (newStart.isAfter(newEnd)) {
+      final swapped = newStart;
+      newStart = newEnd;
+      newEnd = swapped;
+      state = state.copyWith(dateRangeStart: newStart, dateRangeEnd: newEnd);
+    }
+    loadInitial();
+  }
+
+  void clearDateRange() {
+    setDateRange(clear: true);
+  }
+
+  DateTime _dateOnly(DateTime value) =>
+      DateTime(value.year, value.month, value.day);
+
+  String? _apiDate(DateTime? value) {
+    if (value == null) {
+      return null;
+    }
+    final y = value.year.toString().padLeft(4, '0');
+    final m = value.month.toString().padLeft(2, '0');
+    final d = value.day.toString().padLeft(2, '0');
+    return '$y-$m-$d';
+  }
 
   Future<void> loadInitial() async {
     final token = _token;
@@ -72,7 +143,12 @@ class ExpensesListNotifier extends Notifier<ExpensesListState> {
     );
 
     try {
-      final body = await _api.listExpenses(token: token, page: 1);
+      final body = await _api.listExpenses(
+        token: token,
+        page: 1,
+        from: _apiDate(state.dateRangeStart),
+        to: _apiDate(state.dateRangeEnd),
+      );
       final parsed = _parsePage(body, appendTo: const []);
       state = state.copyWith(
         isLoadingInitial: false,
@@ -96,6 +172,10 @@ class ExpensesListNotifier extends Notifier<ExpensesListState> {
   }
 
   Future<void> loadMore() async {
+    await _loadNextPage();
+  }
+
+  Future<void> _loadNextPage() async {
     final token = _token;
     if (token == null || !state.hasMore || state.isLoadingMore || state.isLoadingInitial) {
       return;
@@ -108,7 +188,12 @@ class ExpensesListNotifier extends Notifier<ExpensesListState> {
     state = state.copyWith(isLoadingMore: true);
 
     try {
-      final body = await _api.listExpenses(token: token, page: nextPage);
+      final body = await _api.listExpenses(
+        token: token,
+        page: nextPage,
+        from: _apiDate(state.dateRangeStart),
+        to: _apiDate(state.dateRangeEnd),
+      );
       final parsed = _parsePage(body, appendTo: state.items);
       state = state.copyWith(
         isLoadingMore: false,

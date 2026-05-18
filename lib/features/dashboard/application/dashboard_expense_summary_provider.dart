@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../auth/application/session_notifier.dart';
 import '../../expenses/data/expenses_api.dart';
 import '../../expenses/domain/expense.dart';
+import '../../expenses/domain/expense_date.dart';
 
 class DailyExpenseTotal {
   const DailyExpenseTotal({required this.day, required this.total});
@@ -85,7 +86,7 @@ Future<DashboardExpenseSummary> _loadSummary(
 
     DateTime? minDayOnPage;
     for (final e in parsed.items) {
-      final day = _expenseLocalDay(e.dateIso, now);
+      final day = expenseLocalDay(e.dateIso, referenceNow: now);
       if (day != null && (minDayOnPage == null || day.isBefore(minDayOnPage))) {
         minDayOnPage = day;
       }
@@ -109,7 +110,7 @@ Future<DashboardExpenseSummary> _loadSummary(
   final byCategory = <String, double>{};
 
   for (final e in accumulated) {
-    final day = _expenseLocalDay(e.dateIso, now);
+    final day = expenseLocalDay(e.dateIso, referenceNow: now);
     if (day == null) {
       continue;
     }
@@ -138,42 +139,6 @@ Future<DashboardExpenseSummary> _loadSummary(
     dailyTotals: dailyTotals,
     categoryTotals: categoryTotals,
   );
-}
-
-DateTime? _expenseLocalDay(String raw, DateTime referenceNow) {
-  final trimmed = raw.trim();
-  if (trimmed.isEmpty) {
-    return null;
-  }
-
-  final iso = DateTime.tryParse(trimmed);
-  if (iso != null) {
-    final local = iso.toLocal();
-    return DateTime(local.year, local.month, local.day);
-  }
-
-  final parts = trimmed.split('/');
-  if (parts.length != 2) {
-    return null;
-  }
-  final month = int.tryParse(parts[0].trim());
-  final day = int.tryParse(parts[1].trim());
-  if (month == null ||
-      day == null ||
-      month < 1 ||
-      month > 12 ||
-      day < 1 ||
-      day > 31) {
-    return null;
-  }
-
-  var year = referenceNow.year;
-  var candidate = DateTime(year, month, day);
-  if (candidate.isAfter(referenceNow)) {
-    year -= 1;
-    candidate = DateTime(year, month, day);
-  }
-  return DateTime(candidate.year, candidate.month, candidate.day);
 }
 
 class _ParsedPage {

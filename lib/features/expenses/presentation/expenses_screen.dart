@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_slidable/flutter_slidable.dart';
+import 'package:intl/intl.dart';
 
 import '../../dashboard/application/dashboard_expense_summary_provider.dart';
 import '../application/expenses_list_notifier.dart';
@@ -58,9 +59,40 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen> {
     return '$y-$m-$d';
   }
 
+  Future<void> _pickDate({
+    required bool isStart,
+    required DateTime? current,
+    required DateTime? other,
+  }) async {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final initial = current ?? other ?? today;
+
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: initial,
+      firstDate: DateTime(2000),
+      lastDate: today,
+    );
+    if (picked == null || !mounted) {
+      return;
+    }
+
+    final notifier = ref.read(expensesListProvider.notifier);
+    if (isStart) {
+      notifier.setDateRange(start: picked, end: other);
+    } else {
+      notifier.setDateRange(start: other, end: picked);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final list = ref.watch(expensesListProvider);
+    final filtered = list.filteredItems;
+    final showLoader = !list.hasDateFilter && list.hasMore;
+    final itemCount =
+        filtered.length + (showLoader ? 1 : 0) + (filtered.isNotEmpty ? 1 : 0);
 
     ref.listen<ExpensesListState>(expensesListProvider, (previous, next) {
       final msg = next.initialError;
@@ -85,60 +117,270 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen> {
         icon: const Icon(Icons.add),
         label: const Text('Add expense'),
       ),
-      body: list.isLoadingInitial && list.items.isEmpty
-          ? const Center(child: CircularProgressIndicator())
-          : list.items.isEmpty && list.initialError != null
-          ? Center(
-              child: Padding(
-                padding: const EdgeInsets.all(24),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(list.initialError!, textAlign: TextAlign.center),
-                    const SizedBox(height: 16),
-                    FilledButton(
-                      onPressed: () =>
-                          ref.read(expensesListProvider.notifier).loadInitial(),
-                      child: const Text('Retry'),
+      body: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _DateRangeFilterBar(
+            rangeStart: list.dateRangeStart,
+            rangeEnd: list.dateRangeEnd,
+            onPickStart: () => _pickDate(
+              isStart: true,
+              current: list.dateRangeStart,
+              other: list.dateRangeEnd,
+            ),
+            onPickEnd: () => _pickDate(
+              isStart: false,
+              current: list.dateRangeEnd,
+              other: list.dateRangeStart,
+            ),
+            onClear: list.hasDateFilter
+                ? () => ref.read(expensesListProvider.notifier).clearDateRange()
+                : null,
+          ),
+          Expanded(
+            child: list.isLoadingInitial && list.items.isEmpty
+                ? const Center(child: CircularProgressIndicator())
+                : list.items.isEmpty && list.initialError != null
+                ? Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(24),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            list.initialError!,
+                            textAlign: TextAlign.center,
+                          ),
+                          const SizedBox(height: 16),
+                          FilledButton(
+                            onPressed: () => ref
+                                .read(expensesListProvider.notifier)
+                                .loadInitial(),
+                            child: const Text('Retry'),
+                          ),
+                        ],
+                      ),
                     ),
-                  ],
-                ),
-              ),
-            )
-          : RefreshIndicator(
-              onRefresh: () =>
-                  ref.read(expensesListProvider.notifier).refresh(),
-              child: SlidableAutoCloseBehavior(
-                child: ListView.builder(
-                  controller: _scrollController,
-                  physics: const AlwaysScrollableScrollPhysics(),
-                  padding: EdgeInsets.fromLTRB(
-                    16,
-                    8,
-                    16,
-                    // Extended FAB + margin + safe inset so the last row clears the button.
-                    MediaQuery.paddingOf(context).bottom + 112,
-                  ),
-                  itemCount: list.items.length + (list.hasMore ? 1 : 0),
-                  itemBuilder: (context, index) {
-                    if (index >= list.items.length) {
-                      return Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                        child: Center(
-                          child: list.isLoadingMore
-                              ? const CircularProgressIndicator()
-                              : const SizedBox.shrink(),
+                  )
+                : filtered.isEmpty
+                ? Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(24),
+                      child: Text(
+                        list.hasDateFilter
+                            ? 'No expenses in this date range.'
+                            : 'No expenses yet.',
+                        textAlign: TextAlign.center,
+                        style: Theme.of(context).textTheme.bodyLarge,
+                      ),
+                    ),
+                  )
+                : RefreshIndicator(
+                    onRefresh: () =>
+                        ref.read(expensesListProvider.notifier).refresh(),
+                    child: SlidableAutoCloseBehavior(
+                      child: ListView.builder(
+                        controller: _scrollController,
+                        physics: const AlwaysScrollableScrollPhysics(),
+                        padding: EdgeInsets.fromLTRB(
+                          16,
+                          0,
+                          16,
+                          MediaQuery.paddingOf(context).bottom + 112,
                         ),
-                      );
-                    }
-                    return _ExpenseRow(
-                      expense: list.items[index],
-                      formatDate: _formatDate,
-                    );
-                  },
-                ),
+                        itemCount: itemCount,
+                        itemBuilder: (context, index) {
+                          if (index < filtered.length) {
+                            return _ExpenseRow(
+                              expense: filtered[index],
+                              formatDate: _formatDate,
+                            );
+                          }
+
+                          if (index == filtered.length) {
+                            return _ExpensesTotalFooter(total: list.filteredTotal);
+                          }
+
+                          return Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 16),
+                            child: Center(
+                              child: list.isLoadingMore
+                                  ? const CircularProgressIndicator()
+                                  : const SizedBox.shrink(),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DateRangeFilterBar extends StatelessWidget {
+  const _DateRangeFilterBar({
+    required this.rangeStart,
+    required this.rangeEnd,
+    required this.onPickStart,
+    required this.onPickEnd,
+    this.onClear,
+  });
+
+  final DateTime? rangeStart;
+  final DateTime? rangeEnd;
+  final VoidCallback onPickStart;
+  final VoidCallback onPickEnd;
+  final VoidCallback? onClear;
+
+  static final _displayFormat = DateFormat.yMMMd();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+
+    return Material(
+      color: scheme.surfaceContainerLow,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 12, 8, 12),
+        child: Row(
+          children: [
+            Expanded(
+              child: _DateField(
+                label: 'From',
+                value: rangeStart != null
+                    ? _displayFormat.format(rangeStart!)
+                    : 'Select date',
+                onTap: onPickStart,
               ),
             ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              child: Icon(
+                Icons.arrow_forward,
+                size: 18,
+                color: scheme.onSurfaceVariant,
+              ),
+            ),
+            Expanded(
+              child: _DateField(
+                label: 'To',
+                value: rangeEnd != null
+                    ? _displayFormat.format(rangeEnd!)
+                    : 'Select date',
+                onTap: onPickEnd,
+              ),
+            ),
+            if (onClear != null)
+              IconButton(
+                onPressed: onClear,
+                tooltip: 'Clear date filter',
+                icon: const Icon(Icons.close),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _DateField extends StatelessWidget {
+  const _DateField({
+    required this.label,
+    required this.value,
+    required this.onTap,
+  });
+
+  final String label;
+  final String value;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+
+    return Semantics(
+      button: true,
+      label: '$label, $value',
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: InputDecorator(
+          decoration: InputDecoration(
+            labelText: label,
+            isDense: true,
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 12,
+              vertical: 10,
+            ),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  value,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: scheme.onSurface,
+                  ),
+                ),
+              ),
+              Icon(Icons.calendar_today, size: 18, color: scheme.primary),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ExpensesTotalFooter extends StatelessWidget {
+  const _ExpensesTotalFooter({required this.total});
+
+  final double total;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final currency = NumberFormat.currency(symbol: r'$', decimalDigits: 2);
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 8, bottom: 16),
+      child: Material(
+        color: scheme.primaryContainer.withValues(alpha: 0.45),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+          side: BorderSide(color: scheme.outlineVariant.withValues(alpha: 0.5)),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          child: Row(
+            children: [
+              Text(
+                'Total',
+                style: theme.textTheme.titleSmall?.copyWith(
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const Spacer(),
+              Text(
+                currency.format(total),
+                style: theme.textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w700,
+                  fontFeatures: const [FontFeature.tabularFigures()],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
