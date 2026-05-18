@@ -7,6 +7,7 @@ import '../../dashboard/application/dashboard_expense_summary_provider.dart';
 import '../application/expenses_list_notifier.dart';
 import '../domain/expense.dart';
 import 'add_expense_sheet.dart';
+import 'expense_detail_sheet.dart';
 
 class ExpensesScreen extends ConsumerStatefulWidget {
   const ExpensesScreen({super.key});
@@ -550,42 +551,45 @@ class _ExpenseRow extends ConsumerWidget {
         side: BorderSide(color: scheme.outlineVariant.withValues(alpha: 0.4)),
       ),
       clipBehavior: Clip.antiAlias,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            SizedBox(
-              width: _dateColumnWidth,
-              child: Text(
-                formatDate(expense.dateIso),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: scheme.onSurfaceVariant,
+      child: InkWell(
+        onTap: () => showExpenseDetailSheet(context, expense),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              SizedBox(
+                width: _dateColumnWidth,
+                child: Text(
+                  formatDate(expense.dateIso),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: scheme.onSurfaceVariant,
+                  ),
                 ),
               ),
-            ),
-            Expanded(
-              child: Text(
-                expense.item,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: theme.textTheme.titleSmall,
+              Expanded(
+                child: Text(
+                  expense.item,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.titleSmall,
+                ),
               ),
-            ),
-            const SizedBox(width: 12),
-            SizedBox(
-              width: _amountColumnWidth,
-              child: Text(
-                expense.total,
-                textAlign: TextAlign.right,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: amountStyle,
+              const SizedBox(width: 12),
+              SizedBox(
+                width: _amountColumnWidth,
+                child: Text(
+                  expense.total,
+                  textAlign: TextAlign.right,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: amountStyle,
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

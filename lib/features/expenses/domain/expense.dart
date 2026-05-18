@@ -6,9 +6,11 @@ class Expense {
     required this.price,
     required this.total,
     required this.dateIso,
+    this.transactionAtIso,
     this.receiptUrl,
     this.categoryId,
     this.categoryName,
+    this.storeName,
   });
 
   final int id;
@@ -17,9 +19,11 @@ class Expense {
   final String price;
   final String total;
   final String dateIso;
+  final String? transactionAtIso;
   final String? receiptUrl;
   final int? categoryId;
   final String? categoryName;
+  final String? storeName;
 
   factory Expense.fromJson(Map<String, dynamic> json) {
     final idRaw = json['id'];
@@ -30,16 +34,23 @@ class Expense {
         ? quantityRaw
         : (quantityRaw is num ? quantityRaw.toInt() : int.tryParse('$quantityRaw') ?? 1);
 
+    final date = json['date'] as String? ?? '';
+    final transactionAt = json['transaction_at'] as String?;
+
     return Expense(
       id: id,
       item: json['item'] as String,
       quantity: quantity,
       price: _decimalString(json['price']),
       total: _decimalString(json['total'] ?? json['price']),
-      dateIso: json['date'] as String? ?? '',
+      dateIso: date,
+      transactionAtIso: transactionAt?.trim().isNotEmpty == true
+          ? transactionAt!.trim()
+          : (date.isNotEmpty ? date : null),
       receiptUrl: json['receipt_url'] as String?,
       categoryId: _optionalInt(json['category_id']),
       categoryName: _categoryNameFromJson(json['category']),
+      storeName: _storeNameFromJson(json['store']),
     );
   }
 
@@ -64,6 +75,18 @@ class Expense {
   }
 
   static String? _categoryNameFromJson(Object? raw) {
+    if (raw is! Map) {
+      return null;
+    }
+    final name = raw['name'];
+    if (name == null) {
+      return null;
+    }
+    final trimmed = name.toString().trim();
+    return trimmed.isEmpty ? null : trimmed;
+  }
+
+  static String? _storeNameFromJson(Object? raw) {
     if (raw is! Map) {
       return null;
     }
