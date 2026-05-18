@@ -90,9 +90,9 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen> {
   Widget build(BuildContext context) {
     final list = ref.watch(expensesListProvider);
     final filtered = list.filteredItems;
-    final showLoader = !list.hasDateFilter && list.hasMore;
+    final showLoadMore = list.hasMore;
     final itemCount =
-        filtered.length + (showLoader ? 1 : 0) + (filtered.isNotEmpty ? 1 : 0);
+        filtered.length + (showLoadMore ? 1 : 0) + (filtered.isNotEmpty ? 1 : 0);
 
     ref.listen<ExpensesListState>(expensesListProvider, (previous, next) {
       final msg = next.initialError;
@@ -201,13 +201,11 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen> {
                             return _ExpensesTotalFooter(total: list.filteredTotal);
                           }
 
-                          return Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 16),
-                            child: Center(
-                              child: list.isLoadingMore
-                                  ? const CircularProgressIndicator()
-                                  : const SizedBox.shrink(),
-                            ),
+                          return _LoadMoreFooter(
+                            isLoading: list.isLoadingMore,
+                            onShowMore: () => ref
+                                .read(expensesListProvider.notifier)
+                                .loadMore(),
                           );
                         },
                       ),
@@ -335,6 +333,35 @@ class _DateField extends StatelessWidget {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _LoadMoreFooter extends StatelessWidget {
+  const _LoadMoreFooter({
+    required this.isLoading,
+    required this.onShowMore,
+  });
+
+  final bool isLoading;
+  final VoidCallback onShowMore;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 16),
+      child: Center(
+        child: isLoading
+            ? const SizedBox(
+                width: 28,
+                height: 28,
+                child: CircularProgressIndicator(strokeWidth: 2.5),
+              )
+            : TextButton(
+                onPressed: onShowMore,
+                child: const Text('Show more'),
+              ),
       ),
     );
   }
