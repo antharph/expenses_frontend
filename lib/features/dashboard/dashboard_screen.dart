@@ -7,6 +7,10 @@ import 'package:intl/intl.dart';
 
 import '../auth/application/auth_page.dart';
 import '../auth/application/session_notifier.dart';
+import '../budget/application/budget_providers.dart';
+import '../budget/presentation/budget_history_screen.dart';
+import '../budget/presentation/budget_progress_card.dart';
+import '../budget/presentation/create_budget_sheet.dart';
 import 'application/dashboard_expense_summary_provider.dart';
 import 'domain/expense_week.dart';
 import '../expenses/presentation/expenses_screen.dart';
@@ -295,14 +299,18 @@ class _WeekDashboardPage extends ConsumerWidget {
   final ExpenseWeekKey weekKey;
 
   void _toggleCategoryFilter(WidgetRef ref, String label) {
-    final notifier = ref.read(dashboardCategoryFilterProvider(weekKey).notifier);
+    final notifier = ref.read(
+      dashboardCategoryFilterProvider(weekKey).notifier,
+    );
     notifier.state = notifier.state == label ? null : label;
   }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final summaryAsync = ref.watch(dashboardExpenseSummaryProvider(weekKey));
-    final selectedCategory = ref.watch(dashboardCategoryFilterProvider(weekKey));
+    final selectedCategory = ref.watch(
+      dashboardCategoryFilterProvider(weekKey),
+    );
 
     return summaryAsync.when(
       data: (summary) {
@@ -331,12 +339,13 @@ class _WeekDashboardPage extends ConsumerWidget {
                             categoryLabel: selectedCategory,
                             onClear: () {
                               ref
-                                  .read(
-                                    dashboardCategoryFilterProvider(
-                                      weekKey,
-                                    ).notifier,
-                                  )
-                                  .state = null;
+                                      .read(
+                                        dashboardCategoryFilterProvider(
+                                          weekKey,
+                                        ).notifier,
+                                      )
+                                      .state =
+                                  null;
                             },
                           ),
                         ],
@@ -354,6 +363,8 @@ class _WeekDashboardPage extends ConsumerWidget {
                 height: 248,
                 child: _DailyExpenseBarChart(summary: display),
               ),
+              const SizedBox(height: 40),
+              const _BudgetProgressSection(),
               const SizedBox(height: 40),
               Text(
                 'By category',
@@ -373,7 +384,8 @@ class _WeekDashboardPage extends ConsumerWidget {
               _CategoryExpensePieChart(
                 summary: summary,
                 selectedCategory: selectedCategory,
-                onCategorySelected: (label) => _toggleCategoryFilter(ref, label),
+                onCategorySelected: (label) =>
+                    _toggleCategoryFilter(ref, label),
               ),
             ],
           ),
@@ -404,11 +416,134 @@ class _WeekDashboardPage extends ConsumerWidget {
   }
 }
 
+class _BudgetProgressSection extends ConsumerWidget {
+  const _BudgetProgressSection();
+
+  void _showCreateBudgetSheet(BuildContext context) {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (_) => const CreateBudgetSheet(),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final budgetsAsync = ref.watch(dashboardBudgetsProvider);
+    final theme = Theme.of(context);
+
+    return budgetsAsync.when(
+      data: (budgets) {
+        if (budgets.isEmpty) {
+          return _EmptyBudgetPrompt(
+            onCreateBudget: () => _showCreateBudgetSheet(context),
+          );
+        }
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Budgets',
+              style: theme.textTheme.titleSmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Tap a card for period history',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: 12),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: FilledButton.icon(
+                onPressed: () => _showCreateBudgetSheet(context),
+                icon: const Icon(Icons.add_rounded),
+                label: const Text('Create budget'),
+              ),
+            ),
+            const SizedBox(height: 12),
+            for (var i = 0; i < budgets.length; i++) ...[
+              if (i > 0) const SizedBox(height: 12),
+              BudgetProgressCard(
+                budget: budgets[i],
+                onTap: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => BudgetHistoryScreen(
+                        budgetId: budgets[i].id,
+                        budgetName: budgets[i].name,
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ],
+          ],
+        );
+      },
+      loading: () => const SizedBox(
+        height: 48,
+        child: Center(child: CircularProgressIndicator()),
+      ),
+      error: (error, stackTrace) => const SizedBox.shrink(),
+    );
+  }
+}
+
+class _EmptyBudgetPrompt extends StatelessWidget {
+  const _EmptyBudgetPrompt({required this.onCreateBudget});
+
+  final VoidCallback onCreateBudget;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+
+    return Material(
+      color: scheme.surfaceContainerLow.withValues(alpha: 0.55),
+      borderRadius: BorderRadius.circular(16),
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(Icons.account_balance_wallet_outlined, color: scheme.primary),
+            const SizedBox(height: 12),
+            Text(
+              'No budgets yet',
+              style: theme.textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              'Create a budget to track what remains for each pay period.',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: scheme.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: 16),
+            FilledButton.icon(
+              onPressed: onCreateBudget,
+              icon: const Icon(Icons.add_rounded),
+              label: const Text('Create budget'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _WeekTotalHeader extends StatelessWidget {
-  const _WeekTotalHeader({
-    required this.total,
-    this.categoryLabel,
-  });
+  const _WeekTotalHeader({required this.total, this.categoryLabel});
 
   final double total;
   final String? categoryLabel;
@@ -484,10 +619,7 @@ class _CategoryFilterBanner extends StatelessWidget {
                 minimumSize: const Size(48, 48),
                 tapTargetSize: MaterialTapTargetSize.padded,
               ),
-              child: Text(
-                'Clear',
-                style: TextStyle(color: scheme.primary),
-              ),
+              child: Text('Clear', style: TextStyle(color: scheme.primary)),
             ),
           ],
         ),
@@ -497,10 +629,7 @@ class _CategoryFilterBanner extends StatelessWidget {
 }
 
 class _WeekRangeSubtitle extends StatelessWidget {
-  const _WeekRangeSubtitle({
-    required this.startDate,
-    required this.endDate,
-  });
+  const _WeekRangeSubtitle({required this.startDate, required this.endDate});
 
   final DateTime startDate;
   final DateTime endDate;
@@ -508,7 +637,8 @@ class _WeekRangeSubtitle extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final range = '${DateFormat.MMMd().format(startDate)} – '
+    final range =
+        '${DateFormat.MMMd().format(startDate)} – '
         '${DateFormat.MMMd().format(endDate)}';
 
     return Row(
@@ -650,9 +780,7 @@ class _DailyExpenseBarChart extends StatelessWidget {
 
                 final labelStyle = theme.textTheme.labelSmall?.copyWith(
                   fontWeight: isToday ? FontWeight.w600 : FontWeight.w400,
-                  color: isToday
-                      ? scheme.primary
-                      : scheme.onSurfaceVariant,
+                  color: isToday ? scheme.primary : scheme.onSurfaceVariant,
                 );
 
                 return SideTitleWidget(
