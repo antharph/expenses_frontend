@@ -60,6 +60,13 @@ class BudgetsApi {
     return BudgetProgress.fromJson(Map<String, dynamic>.from(data as Map));
   }
 
+  Future<void> deleteBudget({
+    required String token,
+    required int budgetId,
+  }) async {
+    await _client(token).delete<void>('/api/v1/budgets/$budgetId');
+  }
+
   Future<List<BudgetLogEntry>> listBudgetLogs({
     required String token,
     required int budgetId,
