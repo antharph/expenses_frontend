@@ -218,6 +218,11 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
 /// Shared horizontal inset so section headers and chart copy line up visually.
 const double _kDashboardContentGutter = 24;
 
+/// Side-by-side spending analytics and budgets when content is wide enough.
+const double _kDashboardTwoColumnBreakpoint = 840;
+
+const double _kDashboardSectionGap = 40;
+
 class _DashboardHome extends ConsumerStatefulWidget {
   const _DashboardHome();
 
@@ -316,79 +321,71 @@ class _WeekDashboardPage extends ConsumerWidget {
       data: (summary) {
         final display = summary.filteredView(categoryLabel: selectedCategory);
 
-        return SingleChildScrollView(
-          physics: const ClampingScrollPhysics(),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _WeekTotalHeader(
-                total: display.weekTotal,
-                categoryLabel: selectedCategory,
-              ),
-              AnimatedSize(
-                duration: const Duration(milliseconds: 220),
-                curve: Curves.easeInOut,
-                alignment: Alignment.topCenter,
-                child: selectedCategory != null
-                    ? Column(
+        final spendingAnalytics = _DashboardSpendingAnalytics(
+          display: display,
+          summary: summary,
+          selectedCategory: selectedCategory,
+          onClearCategoryFilter: () {
+            ref
+                    .read(
+                      dashboardCategoryFilterProvider(weekKey).notifier,
+                    )
+                    .state =
+                null;
+          },
+        );
+
+        final categoryBreakdown = _DashboardCategoryBreakdown(
+          summary: summary,
+          selectedCategory: selectedCategory,
+          onCategorySelected: (label) => _toggleCategoryFilter(ref, label),
+        );
+
+        const budgets = _BudgetProgressSection();
+
+        return LayoutBuilder(
+          builder: (context, constraints) {
+            final useTwoColumns =
+                constraints.maxWidth >= _kDashboardTwoColumnBreakpoint;
+
+            if (useTwoColumns) {
+              return SingleChildScrollView(
+                physics: const ClampingScrollPhysics(),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      flex: 3,
+                      child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisSize: MainAxisSize.min,
                         children: [
-                          const SizedBox(height: 8),
-                          _CategoryFilterBanner(
-                            categoryLabel: selectedCategory,
-                            onClear: () {
-                              ref
-                                      .read(
-                                        dashboardCategoryFilterProvider(
-                                          weekKey,
-                                        ).notifier,
-                                      )
-                                      .state =
-                                  null;
-                            },
-                          ),
+                          spendingAnalytics,
+                          const SizedBox(height: _kDashboardSectionGap),
+                          categoryBreakdown,
                         ],
-                      )
-                    : const SizedBox.shrink(),
-              ),
-              const SizedBox(height: 40),
-              _WeekRangeSubtitle(
-                startDate: summary.startDate,
-                endDate: summary.endDate,
-              ),
-              const SizedBox(height: 12),
-              SizedBox(
-                width: double.infinity,
-                height: 248,
-                child: _DailyExpenseBarChart(summary: display),
-              ),
-              const SizedBox(height: 40),
-              const _BudgetProgressSection(),
-              const SizedBox(height: 40),
-              Text(
-                'By category',
-                style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
-                  fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    const SizedBox(width: 32),
+                    Expanded(flex: 2, child: budgets),
+                  ],
                 ),
+              );
+            }
+
+            return SingleChildScrollView(
+              physics: const ClampingScrollPhysics(),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  spendingAnalytics,
+                  const SizedBox(height: _kDashboardSectionGap),
+                  categoryBreakdown,
+                  const SizedBox(height: _kDashboardSectionGap),
+                  budgets,
+                ],
               ),
-              const SizedBox(height: 4),
-              Text(
-                'Tap a slice to filter the chart above',
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
-                ),
-              ),
-              const SizedBox(height: 12),
-              _CategoryExpensePieChart(
-                summary: summary,
-                selectedCategory: selectedCategory,
-                onCategorySelected: (label) =>
-                    _toggleCategoryFilter(ref, label),
-              ),
-            ],
-          ),
+            );
+          },
         );
       },
       loading: () => const Center(child: CircularProgressIndicator()),
@@ -412,6 +409,105 @@ class _WeekDashboardPage extends ConsumerWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+class _DashboardSpendingAnalytics extends StatelessWidget {
+  const _DashboardSpendingAnalytics({
+    required this.display,
+    required this.summary,
+    required this.selectedCategory,
+    required this.onClearCategoryFilter,
+  });
+
+  final DashboardExpenseSummary display;
+  final DashboardExpenseSummary summary;
+  final String? selectedCategory;
+  final VoidCallback onClearCategoryFilter;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _WeekTotalHeader(
+          total: display.weekTotal,
+          categoryLabel: selectedCategory,
+        ),
+        AnimatedSize(
+          duration: const Duration(milliseconds: 220),
+          curve: Curves.easeInOut,
+          alignment: Alignment.topCenter,
+          child: selectedCategory != null
+              ? Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const SizedBox(height: 8),
+                    _CategoryFilterBanner(
+                      categoryLabel: selectedCategory!,
+                      onClear: onClearCategoryFilter,
+                    ),
+                  ],
+                )
+              : const SizedBox.shrink(),
+        ),
+        const SizedBox(height: _kDashboardSectionGap),
+        _WeekRangeSubtitle(
+          startDate: summary.startDate,
+          endDate: summary.endDate,
+        ),
+        const SizedBox(height: 12),
+        SizedBox(
+          width: double.infinity,
+          height: 248,
+          child: _DailyExpenseBarChart(summary: display),
+        ),
+      ],
+    );
+  }
+}
+
+class _DashboardCategoryBreakdown extends StatelessWidget {
+  const _DashboardCategoryBreakdown({
+    required this.summary,
+    required this.selectedCategory,
+    required this.onCategorySelected,
+  });
+
+  final DashboardExpenseSummary summary;
+  final String? selectedCategory;
+  final ValueChanged<String> onCategorySelected;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'By category',
+          style: theme.textTheme.titleSmall?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          'Tap a slice to filter the chart above',
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
+        ),
+        const SizedBox(height: 12),
+        _CategoryExpensePieChart(
+          summary: summary,
+          selectedCategory: selectedCategory,
+          onCategorySelected: onCategorySelected,
+        ),
+      ],
     );
   }
 }
