@@ -7,10 +7,7 @@ import 'package:intl/intl.dart';
 
 import '../auth/application/auth_page.dart';
 import '../auth/application/session_notifier.dart';
-import '../budget/application/budget_providers.dart';
-import '../budget/presentation/budget_history_screen.dart';
-import '../budget/presentation/budget_progress_card.dart';
-import '../budget/presentation/create_budget_sheet.dart';
+import '../budget/presentation/budgets_screen.dart';
 import 'application/dashboard_expense_summary_provider.dart';
 import 'domain/expense_week.dart';
 import '../expenses/presentation/expenses_screen.dart';
@@ -89,9 +86,12 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     final width = MediaQuery.sizeOf(context).width;
     final compactRail = width < _compactRailWidthBreakpoint;
 
-    Widget body = _railIndex == 0
-        ? const _DashboardHome()
-        : const ExpensesScreen();
+    Widget body = switch (_railIndex) {
+      0 => const _DashboardHome(),
+      1 => const BudgetsScreen(),
+      2 => const ExpensesScreen(),
+      _ => const SizedBox.shrink(),
+    };
 
     if (compactRail && _railExpanded) {
       body = Stack(
@@ -148,7 +148,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                               .withValues(alpha: 0.82),
                           selectedIndex: _railIndex,
                           onDestinationSelected: (index) {
-                            if (index == 2) {
+                            if (index == 3) {
                               _logout();
                               return;
                             }
@@ -169,6 +169,11 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                               icon: Icon(Icons.dashboard_outlined),
                               selectedIcon: Icon(Icons.dashboard),
                               label: Text('Dashboard'),
+                            ),
+                            NavigationRailDestination(
+                              icon: Icon(Icons.account_balance_wallet_outlined),
+                              selectedIcon: Icon(Icons.account_balance_wallet),
+                              label: Text('Budgets'),
                             ),
                             NavigationRailDestination(
                               icon: Icon(Icons.receipt_long_outlined),
@@ -217,9 +222,6 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
 
 /// Shared horizontal inset so section headers and chart copy line up visually.
 const double _kDashboardContentGutter = 24;
-
-/// Side-by-side spending analytics and budgets when content is wide enough.
-const double _kDashboardTwoColumnBreakpoint = 840;
 
 const double _kDashboardSectionGap = 40;
 
@@ -341,51 +343,16 @@ class _WeekDashboardPage extends ConsumerWidget {
           onCategorySelected: (label) => _toggleCategoryFilter(ref, label),
         );
 
-        const budgets = _BudgetProgressSection();
-
-        return LayoutBuilder(
-          builder: (context, constraints) {
-            final useTwoColumns =
-                constraints.maxWidth >= _kDashboardTwoColumnBreakpoint;
-
-            if (useTwoColumns) {
-              return SingleChildScrollView(
-                physics: const ClampingScrollPhysics(),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(
-                      flex: 3,
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          spendingAnalytics,
-                          const SizedBox(height: _kDashboardSectionGap),
-                          categoryBreakdown,
-                        ],
-                      ),
-                    ),
-                    const SizedBox(width: 32),
-                    Expanded(flex: 2, child: budgets),
-                  ],
-                ),
-              );
-            }
-
-            return SingleChildScrollView(
-              physics: const ClampingScrollPhysics(),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  spendingAnalytics,
-                  const SizedBox(height: _kDashboardSectionGap),
-                  categoryBreakdown,
-                  const SizedBox(height: _kDashboardSectionGap),
-                  budgets,
-                ],
-              ),
-            );
-          },
+        return SingleChildScrollView(
+          physics: const ClampingScrollPhysics(),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              spendingAnalytics,
+              const SizedBox(height: _kDashboardSectionGap),
+              categoryBreakdown,
+            ],
+          ),
         );
       },
       loading: () => const Center(child: CircularProgressIndicator()),
@@ -508,132 +475,6 @@ class _DashboardCategoryBreakdown extends StatelessWidget {
           onCategorySelected: onCategorySelected,
         ),
       ],
-    );
-  }
-}
-
-class _BudgetProgressSection extends ConsumerWidget {
-  const _BudgetProgressSection();
-
-  void _showCreateBudgetSheet(BuildContext context) {
-    showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      useSafeArea: true,
-      builder: (_) => const CreateBudgetSheet(),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final budgetsAsync = ref.watch(dashboardBudgetsProvider);
-    final theme = Theme.of(context);
-
-    return budgetsAsync.when(
-      data: (budgets) {
-        if (budgets.isEmpty) {
-          return _EmptyBudgetPrompt(
-            onCreateBudget: () => _showCreateBudgetSheet(context),
-          );
-        }
-
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Budgets',
-              style: theme.textTheme.titleSmall?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              'Tap a card for period history',
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
-            ),
-            const SizedBox(height: 12),
-            Align(
-              alignment: Alignment.centerLeft,
-              child: FilledButton.icon(
-                onPressed: () => _showCreateBudgetSheet(context),
-                icon: const Icon(Icons.add_rounded),
-                label: const Text('Create budget'),
-              ),
-            ),
-            const SizedBox(height: 12),
-            for (var i = 0; i < budgets.length; i++) ...[
-              if (i > 0) const SizedBox(height: 12),
-              BudgetProgressCard(
-                budget: budgets[i],
-                onTap: () {
-                  Navigator.of(context).push(
-                    MaterialPageRoute<void>(
-                      builder: (_) => BudgetHistoryScreen(
-                        budgetId: budgets[i].id,
-                        budgetName: budgets[i].name,
-                      ),
-                    ),
-                  );
-                },
-              ),
-            ],
-          ],
-        );
-      },
-      loading: () => const SizedBox(
-        height: 48,
-        child: Center(child: CircularProgressIndicator()),
-      ),
-      error: (error, stackTrace) => const SizedBox.shrink(),
-    );
-  }
-}
-
-class _EmptyBudgetPrompt extends StatelessWidget {
-  const _EmptyBudgetPrompt({required this.onCreateBudget});
-
-  final VoidCallback onCreateBudget;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
-
-    return Material(
-      color: scheme.surfaceContainerLow.withValues(alpha: 0.55),
-      borderRadius: BorderRadius.circular(16),
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Icon(Icons.account_balance_wallet_outlined, color: scheme.primary),
-            const SizedBox(height: 12),
-            Text(
-              'No budgets yet',
-              style: theme.textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              'Create a budget to track what remains for each pay period.',
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: scheme.onSurfaceVariant,
-              ),
-            ),
-            const SizedBox(height: 16),
-            FilledButton.icon(
-              onPressed: onCreateBudget,
-              icon: const Icon(Icons.add_rounded),
-              label: const Text('Create budget'),
-            ),
-          ],
-        ),
-      ),
     );
   }
 }
