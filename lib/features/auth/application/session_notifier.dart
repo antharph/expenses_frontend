@@ -6,13 +6,15 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../core/errors/api_errors.dart';
 import '../../../core/timezone/device_timezone.dart';
+import '../../budget/data/budgets_api.dart';
 import '../data/auth_api.dart';
 import 'user_session.dart';
 
 final authApiProvider = Provider<AuthApi>((ref) => AuthApi());
 
-final sessionProvider =
-    AsyncNotifierProvider<SessionNotifier, UserSession?>(SessionNotifier.new);
+final sessionProvider = AsyncNotifierProvider<SessionNotifier, UserSession?>(
+  SessionNotifier.new,
+);
 
 class SessionNotifier extends AsyncNotifier<UserSession?> {
   static const _tokenKey = 'auth_token';
@@ -42,6 +44,7 @@ class SessionNotifier extends AsyncNotifier<UserSession?> {
         email: user['email'] as String? ?? prefs.getString(_emailKey) ?? '',
       );
       await _persistUserFields(prefs, session);
+      await _syncBudgetCycles(session);
       return session;
     } on DioException {
       await _clearPrefs(prefs);
@@ -66,6 +69,7 @@ class SessionNotifier extends AsyncNotifier<UserSession?> {
         timezone: timezone,
       );
       final session = await _sessionFromAuthResponse(data);
+      await _syncBudgetCycles(session);
       state = AsyncData(session);
       return null;
     } on DioException catch (e) {
@@ -90,6 +94,7 @@ class SessionNotifier extends AsyncNotifier<UserSession?> {
         timezone: timezone,
       );
       final session = await _sessionFromAuthResponse(data);
+      await _syncBudgetCycles(session);
       state = AsyncData(session);
       return null;
     } on DioException catch (e) {
@@ -136,6 +141,7 @@ class SessionNotifier extends AsyncNotifier<UserSession?> {
         timezone: timezone,
       );
       final session = await _sessionFromAuthResponse(data);
+      await _syncBudgetCycles(session);
       state = AsyncData(session);
       return null;
     } on DioException catch (e) {
@@ -165,7 +171,9 @@ class SessionNotifier extends AsyncNotifier<UserSession?> {
     state = const AsyncData(null);
   }
 
-  Future<UserSession> _sessionFromAuthResponse(Map<String, dynamic> data) async {
+  Future<UserSession> _sessionFromAuthResponse(
+    Map<String, dynamic> data,
+  ) async {
     final token = data['token'] as String?;
     final user = data['user'] as Map<String, dynamic>?;
     if (token == null || token.isEmpty || user == null) {
@@ -183,6 +191,17 @@ class SessionNotifier extends AsyncNotifier<UserSession?> {
     await _persistUserFields(prefs, session);
 
     return session;
+  }
+
+  Future<void> _syncBudgetCycles(UserSession session) async {
+    try {
+      await ref.read(budgetsApiProvider).syncBudgetCycles(token: session.token);
+    } on DioException catch (e) {
+      if (e.response?.statusCode == 401) {
+        rethrow;
+      }
+      // Keep the authenticated session if budget sync is temporarily unavailable.
+    }
   }
 
   Future<void> _persistUserFields(

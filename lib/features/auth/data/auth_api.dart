@@ -9,7 +9,7 @@ class AuthApi {
 
   Dio _client(String? bearer) {
     if (_clientOverride != null) {
-      return _clientOverride!;
+      return _clientOverride;
     }
 
     return Dio(
@@ -51,11 +51,7 @@ class AuthApi {
     final client = _client(null);
     final response = await client.post<Map<String, dynamic>>(
       '/api/v1/login',
-      data: {
-        'email': email,
-        'password': password,
-        'timezone': timezone,
-      },
+      data: {'email': email, 'password': password, 'timezone': timezone},
     );
     return response.data ?? <String, dynamic>{};
   }
@@ -67,17 +63,16 @@ class AuthApi {
     final client = _client(null);
     final response = await client.post<Map<String, dynamic>>(
       '/api/v1/auth/google',
-      data: {
-        'id_token': idToken,
-        'timezone': timezone,
-      },
+      data: {'id_token': idToken, 'timezone': timezone},
     );
     return response.data ?? <String, dynamic>{};
   }
 
   Future<Map<String, dynamic>> dashboard({required String token}) async {
     final client = _client(token);
-    final response = await client.get<Map<String, dynamic>>('/api/v1/dashboard');
+    final response = await client.get<Map<String, dynamic>>(
+      '/api/v1/dashboard',
+    );
     return response.data ?? <String, dynamic>{};
   }
 

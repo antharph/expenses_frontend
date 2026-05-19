@@ -8,7 +8,18 @@ import '../domain/budget_progress.dart';
 final budgetsApiProvider = Provider<BudgetsApi>((ref) => BudgetsApi());
 
 class BudgetsApi {
+  BudgetsApi({Dio? clientOverride}) : _clientOverride = clientOverride;
+
+  final Dio? _clientOverride;
+
   Dio _client(String token) {
+    if (_clientOverride != null) {
+      _clientOverride.options.headers.addAll(
+        apiRequestHeaders(authorizationBearer: token),
+      );
+      return _clientOverride;
+    }
+
     return Dio(
       BaseOptions(
         baseUrl: apiBaseUrl(),
@@ -23,6 +34,22 @@ class BudgetsApi {
     final response = await _client(
       token,
     ).get<Map<String, dynamic>>('/api/v1/budgets');
+    final body = response.data ?? <String, dynamic>{};
+    final raw = body['data'];
+    if (raw is! List<dynamic>) {
+      return [];
+    }
+    return raw
+        .map(
+          (e) => BudgetProgress.fromJson(Map<String, dynamic>.from(e as Map)),
+        )
+        .toList();
+  }
+
+  Future<List<BudgetProgress>> syncBudgetCycles({required String token}) async {
+    final response = await _client(
+      token,
+    ).post<Map<String, dynamic>>('/api/v1/budgets/sync-cycles');
     final body = response.data ?? <String, dynamic>{};
     final raw = body['data'];
     if (raw is! List<dynamic>) {
