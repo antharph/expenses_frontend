@@ -91,8 +91,7 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen> {
   Widget build(BuildContext context) {
     final list = ref.watch(expensesListProvider);
     final filtered = list.filteredItems;
-    final showLoadMore = list.hasMore;
-    final itemCount = filtered.length + (showLoadMore ? 1 : 0);
+    final itemCount = filtered.length + (list.isLoadingMore ? 1 : 0);
     final showSummaryBar =
         list.isLoadingInitial ||
         filtered.isNotEmpty ||
@@ -212,12 +211,7 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen> {
                             );
                           }
 
-                          return _LoadMoreFooter(
-                            isLoading: list.isLoadingMore,
-                            onShowMore: () => ref
-                                .read(expensesListProvider.notifier)
-                                .loadMore(),
-                          );
+                          return const _LoadingMoreFooter();
                         },
                       ),
                     ),
@@ -454,30 +448,19 @@ class _ExpensesSummaryBar extends StatelessWidget {
   }
 }
 
-class _LoadMoreFooter extends StatelessWidget {
-  const _LoadMoreFooter({
-    required this.isLoading,
-    required this.onShowMore,
-  });
-
-  final bool isLoading;
-  final VoidCallback onShowMore;
+class _LoadingMoreFooter extends StatelessWidget {
+  const _LoadingMoreFooter();
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 16),
+    return const Padding(
+      padding: EdgeInsets.symmetric(vertical: 16),
       child: Center(
-        child: isLoading
-            ? const SizedBox(
-                width: 28,
-                height: 28,
-                child: CircularProgressIndicator(strokeWidth: 2.5),
-              )
-            : TextButton(
-                onPressed: onShowMore,
-                child: const Text('Show more'),
-              ),
+        child: SizedBox(
+          width: 28,
+          height: 28,
+          child: CircularProgressIndicator(strokeWidth: 2.5),
+        ),
       ),
     );
   }
