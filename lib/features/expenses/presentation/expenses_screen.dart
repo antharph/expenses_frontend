@@ -4,6 +4,7 @@ import 'package:flutter_slidable/flutter_slidable.dart';
 import 'package:intl/intl.dart';
 
 import '../../dashboard/application/dashboard_expense_summary_provider.dart';
+import '../../dashboard/presentation/sign_out_menu_button.dart';
 import '../application/expenses_list_notifier.dart';
 import '../domain/expense.dart';
 import 'add_expense_sheet.dart';
@@ -108,7 +109,10 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen> {
     });
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Expenses')),
+      appBar: AppBar(
+        title: const Text('Expenses'),
+        actions: const [SignOutMenuButton()],
+      ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () {
           showModalBottomSheet<void>(

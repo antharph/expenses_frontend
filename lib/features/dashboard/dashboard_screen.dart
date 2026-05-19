@@ -5,12 +5,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
-import '../auth/application/auth_page.dart';
-import '../auth/application/session_notifier.dart';
 import '../budget/presentation/budgets_screen.dart';
 import 'application/dashboard_expense_summary_provider.dart';
 import 'domain/expense_week.dart';
 import '../expenses/presentation/expenses_screen.dart';
+import 'presentation/sign_out_menu_button.dart';
 
 /// Ceiling for bar chart axis only (not data).
 double _niceChartCeiling(double dataMax, {double headroom = 1.08}) {
@@ -49,10 +48,13 @@ class DashboardScreen extends ConsumerStatefulWidget {
 }
 
 class _DashboardScreenState extends ConsumerState<DashboardScreen> {
-  int _railIndex = 0;
+  int _navIndex = 0;
   bool _railExpanded = true;
 
   static const Duration _railAnimationDuration = Duration(milliseconds: 250);
+
+  /// Phone-width layouts use bottom navigation instead of a persistent side rail.
+  static const double _narrowShellBreakpoint = 600;
 
   /// Below this width an expanded rail feels “full width”; taps on the dimmed
   /// overlay collapse it so sheet content stays readable.
@@ -73,25 +75,55 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     return IconButtonThemeData(style: style);
   }
 
-  Future<void> _logout() async {
-    await ref.read(sessionProvider.notifier).logout();
-    if (!mounted) {
-      return;
-    }
-    ref.read(authPageProvider.notifier).state = AuthPage.login;
+  Widget _tabBody(int index) {
+    return switch (index) {
+      0 => Scaffold(
+        appBar: AppBar(
+          title: const Text('Dashboard'),
+          actions: const [SignOutMenuButton()],
+        ),
+        body: const _DashboardHome(),
+      ),
+      1 => const BudgetsScreen(),
+      2 => const ExpensesScreen(),
+      _ => const SizedBox.shrink(),
+    };
   }
 
   @override
   Widget build(BuildContext context) {
     final width = MediaQuery.sizeOf(context).width;
+    final useBottomNav = width < _narrowShellBreakpoint;
     final compactRail = width < _compactRailWidthBreakpoint;
 
-    Widget body = switch (_railIndex) {
-      0 => const _DashboardHome(),
-      1 => const BudgetsScreen(),
-      2 => const ExpensesScreen(),
-      _ => const SizedBox.shrink(),
-    };
+    if (useBottomNav) {
+      return Scaffold(
+        body: _tabBody(_navIndex),
+        bottomNavigationBar: NavigationBar(
+          selectedIndex: _navIndex,
+          onDestinationSelected: (index) => setState(() => _navIndex = index),
+          destinations: const [
+            NavigationDestination(
+              icon: Icon(Icons.dashboard_outlined),
+              selectedIcon: Icon(Icons.dashboard),
+              label: 'Dashboard',
+            ),
+            NavigationDestination(
+              icon: Icon(Icons.account_balance_wallet_outlined),
+              selectedIcon: Icon(Icons.account_balance_wallet),
+              label: 'Budgets',
+            ),
+            NavigationDestination(
+              icon: Icon(Icons.receipt_long_outlined),
+              selectedIcon: Icon(Icons.receipt_long),
+              label: 'Expenses',
+            ),
+          ],
+        ),
+      );
+    }
+
+    Widget body = _tabBody(_navIndex);
 
     if (compactRail && _railExpanded) {
       body = Stack(
@@ -146,14 +178,10 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                               .colorScheme
                               .surfaceContainerLow
                               .withValues(alpha: 0.82),
-                          selectedIndex: _railIndex,
+                          selectedIndex: _navIndex,
                           onDestinationSelected: (index) {
-                            if (index == 3) {
-                              _logout();
-                              return;
-                            }
                             setState(() {
-                              _railIndex = index;
+                              _navIndex = index;
                               if (compactRail) {
                                 _railExpanded = false;
                               }
@@ -179,11 +207,6 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                               icon: Icon(Icons.receipt_long_outlined),
                               selectedIcon: Icon(Icons.receipt_long),
                               label: Text('Expenses'),
-                            ),
-                            NavigationRailDestination(
-                              icon: Icon(Icons.logout_outlined),
-                              selectedIcon: Icon(Icons.logout),
-                              label: Text('Logout'),
                             ),
                           ],
                         ),

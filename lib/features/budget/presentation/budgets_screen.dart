@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/errors/api_errors.dart';
+import '../../dashboard/presentation/sign_out_menu_button.dart';
 import '../application/budget_providers.dart';
 import 'budget_history_screen.dart';
+import 'budget_list_skeleton.dart';
 import 'budget_progress_card.dart';
 import 'create_budget_sheet.dart';
 
@@ -16,8 +19,14 @@ class BudgetsScreen extends ConsumerWidget {
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
+      showDragHandle: true,
       builder: (_) => const CreateBudgetSheet(),
     );
+  }
+
+  Future<void> _refreshBudgets(WidgetRef ref) async {
+    ref.invalidate(dashboardBudgetsProvider);
+    await ref.read(dashboardBudgetsProvider.future);
   }
 
   @override
@@ -25,7 +34,10 @@ class BudgetsScreen extends ConsumerWidget {
     final budgetsAsync = ref.watch(dashboardBudgetsProvider);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Budgets')),
+      appBar: AppBar(
+        title: const Text('Budgets'),
+        actions: const [SignOutMenuButton()],
+      ),
       floatingActionButton: budgetsAsync.maybeWhen(
         data: (budgets) => budgets.isEmpty
             ? null
@@ -41,50 +53,71 @@ class BudgetsScreen extends ConsumerWidget {
           if (budgets.isEmpty) {
             return Padding(
               padding: const EdgeInsets.all(_kBudgetsContentGutter),
-              child: _EmptyBudgetPrompt(
-                onCreateBudget: () => _showCreateBudgetSheet(context),
+              child: Align(
+                alignment: const Alignment(0, -0.2),
+                child: _EmptyBudgetPrompt(
+                  onCreateBudget: () => _showCreateBudgetSheet(context),
+                ),
               ),
             );
           }
 
-          return ListView.separated(
-            padding: const EdgeInsets.fromLTRB(
-              _kBudgetsContentGutter,
-              12,
-              _kBudgetsContentGutter,
-              _kBudgetsContentGutter,
-            ),
-            itemCount: budgets.length,
-            separatorBuilder: (context, _) => const SizedBox(height: 12),
-            itemBuilder: (context, index) {
-              final budget = budgets[index];
-              return BudgetProgressCard(
-                budget: budget,
-                onTap: () {
-                  Navigator.of(context).push(
-                    MaterialPageRoute<void>(
-                      builder: (_) => BudgetHistoryScreen(
-                        budgetId: budget.id,
-                        budgetName: budget.name,
+          return RefreshIndicator(
+            onRefresh: () => _refreshBudgets(ref),
+            child: ListView.separated(
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: const EdgeInsets.fromLTRB(
+                _kBudgetsContentGutter,
+                12,
+                _kBudgetsContentGutter,
+                _kBudgetsContentGutter,
+              ),
+              itemCount: budgets.length,
+              separatorBuilder: (context, _) => const SizedBox(height: 12),
+              itemBuilder: (context, index) {
+                final budget = budgets[index];
+                return BudgetProgressCard(
+                  budget: budget,
+                  onTap: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (_) => BudgetHistoryScreen(
+                          budgetId: budget.id,
+                          budgetName: budget.name,
+                        ),
                       ),
-                    ),
-                  );
-                },
-              );
-            },
+                    );
+                  },
+                );
+              },
+            ),
           );
         },
-        loading: () => const Center(child: CircularProgressIndicator()),
+        loading: () => const BudgetListSkeleton(),
         error: (error, stackTrace) => Center(
           child: Padding(
             padding: const EdgeInsets.all(_kBudgetsContentGutter),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
+                Icon(
+                  Icons.cloud_off_outlined,
+                  size: 40,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+                const SizedBox(height: 12),
                 Text(
-                  error.toString(),
+                  'Could not load budgets',
+                  style: Theme.of(context).textTheme.titleSmall,
                   textAlign: TextAlign.center,
-                  style: Theme.of(context).textTheme.bodyMedium,
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  formatApiError(error),
+                  textAlign: TextAlign.center,
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
                 ),
                 const SizedBox(height: 16),
                 FilledButton.icon(
@@ -113,7 +146,9 @@ class _EmptyBudgetPrompt extends StatelessWidget {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
 
-    return Center(
+    return Semantics(
+      container: true,
+      label: 'No budgets yet. Create a budget to track what remains for each pay period.',
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 420),
         child: Material(
