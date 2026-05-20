@@ -35,4 +35,4 @@ All expense records, lists, and aggregates shown in the app are **owned by the b
 ## Related docs
 
 - [`AGENTS.md`](./AGENTS.md) — engineering expectations, Riverpod, HTTP boundaries.
-- [`TECHNICAL_STACK.md`](./TECHNICAL_STACK.md) — platforms, stack, `.env` configuration.
+- [`TECHNICAL_STACK.md`](./TECHNICAL_STACK.md) — platforms, stack, `.config` API configuration.

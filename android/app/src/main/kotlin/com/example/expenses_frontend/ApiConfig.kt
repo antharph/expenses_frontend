@@ -3,7 +3,7 @@ package com.example.expenses_frontend
 /**
  * REST API paths for the Expenses Laravel backend (Sanctum + Firebase).
  *
- * Full URLs are built as `{API_URL from Flutter .env}` + [API_V1_PREFIX] + endpoint.
+ * Full URLs are built as `{API_URL from Flutter dart-define}` + [API_V1_PREFIX] + endpoint.
  * Human-readable contract: repository `docs/api/authentication.md` (Laravel app).
  */
 object ApiConfig {

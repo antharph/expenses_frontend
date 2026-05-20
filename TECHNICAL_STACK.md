@@ -50,22 +50,27 @@ Until FVM is committed to the repo, document the chosen Flutter version here or 
 - Central **API base URL**, timeouts, interceptors (auth header, logging in debug), and typed repositories or data sources.
 - **Receipt images:** `multipart/form-data` or the format required by the API; handle size limits and permission UX on the device.
 
-### Configuration (.env)
+### Configuration (`.config/*.json`)
 
-- **Local and non-secret settings** (API endpoints, host hints for TLS/SNI or logging) live in a **`.env`** file at the project root, loaded at app startup (typically via a package such as `flutter_dotenv`, with `.env` listed under `flutter.assets` in `pubspec.yaml`).
-- **Do not commit** machine-specific `.env` files if they embed LAN IPs or personal hostnames; commit a **`.env.example`** with the same keys and placeholder values instead.
+- **API endpoints** are compile-time **`--dart-define`** values loaded from JSON under **`.config/`** via **`--dart-define-from-file`** (read in Dart with `String.fromEnvironment` in `lib/core/config/api_config.dart`).
+- **Files:**
+  - **`.config/config_prod.json`** — production URLs (committed).
+  - **`.config/config_local.json`** — machine-specific dev URLs (gitignored; copy from **`.config/config_local.example.json`**).
 - **Defined keys** (names are stable; values are environment-specific):
 
 | Key | Purpose |
 |-----|---------|
 | `API_URL` | Base URL for HTTP calls to the backend (scheme, host, port, no trailing slash unless your client code expects it). |
-| `API_HOST` | Hostname associated with the API (e.g. for virtual hosts, certificate validation, or `Host` header behavior if your stack uses it). |
+| `API_HOST` | Hostname sent as the HTTP `Host` header (vhost / SNI when the stack needs it). |
 
+- **Run / debug:** pass a define file on every build, e.g. `fvm flutter run --dart-define-from-file=.config/config_local.json`. VS Code launch configs in `.vscode/launch.json` do this for Dev and Prod.
 - **Example (iOS, physical device on a LAN)** — the device must reach a **routable IP** on your network; this is **not** necessarily correct for the **iOS Simulator** (simulator often uses `localhost` / `127.0.0.1` or your Mac’s loopback depending on where the API listens):
 
-  ```env
-  API_URL=http://192.168.0.39:8083
-  API_HOST=expenses.local
+  ```json
+  {
+    "API_URL": "http://192.168.0.39:8083",
+    "API_HOST": "expenses.local"
+  }
   ```
 
 - **iOS Simulator:** often differs from a physical device (e.g. API bound to `127.0.0.1` on the Mac vs. a LAN IP). Adjust `API_URL` (and if needed `API_HOST`) so the simulator’s network view can reach the server.
@@ -86,7 +91,7 @@ The following are **common** companions; versions belong in `pubspec.yaml`, not 
 - **HTTP:** `dio` or `http`, plus small API/repository layer.
 - **Serialization:** `freezed`, `json_serializable`, `build_runner` if you adopt immutable DTOs.
 - **Routing:** `go_router` when navigation grows beyond a few routes.
-- **Environment:** primary contract is a **`.env`** file (see [Configuration (.env)](#configuration-env)); `flutter_dotenv` (or equivalent) is the usual loader. **`--dart-define`** remains an option for CI or flavors when you do not ship a bundled `.env`.
+- **Environment:** **`.config/*.json`** + **`--dart-define-from-file`** (see [Configuration (`.config/*.json`)](#configuration-configjson)); use **`--dart-define`** directly in CI when you do not use a file.
 
 ## Related docs
 

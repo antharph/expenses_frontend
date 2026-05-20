@@ -14,7 +14,7 @@ The Flutter client must send the device timezone on every flow that **creates** 
 | Package | `flutter_timezone` (`FlutterTimezone.getLocalTimezone()`) |
 | Fallback | `UTC` when the native call fails or returns empty (often means iOS/Android plugin not linked—see rebuild note below) |
 
-Always call **`await deviceTimezone()`** in the session layer—do not hardcode `UTC` or read timezone from `.env`.
+Always call **`await deviceTimezone()`** in the session layer—do not hardcode `UTC` or read timezone from API config files.
 
 After adding `flutter_timezone`, run **`fvm flutter pub get`** and **`cd ios && pod install`**, then a **full rebuild** (not hot reload only).
 
@@ -22,7 +22,7 @@ After adding `flutter_timezone`, run **`fvm flutter pub get`** and **`cd ios && 
 
 ## API endpoints that accept `timezone`
 
-Base URL: `{API_URL}/api/v1` (see `.env` `API_URL`).  
+Base URL: `{API_URL}/api/v1` (see `.config/*.json` `API_URL`, passed via `--dart-define-from-file`).  
 Backend contract details: `expenses` repo → `docs/api/authentication.md`.
 
 | Flow | HTTP | Path | Sends `timezone`? | Backend behavior |

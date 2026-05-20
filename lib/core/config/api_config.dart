@@ -1,20 +1,23 @@
-import 'package:flutter_dotenv/flutter_dotenv.dart';
-
-/// Base URL for API calls (from `.env` `API_URL`).
+/// Compile-time API settings from `--dart-define-from-file` (see `.config/*.json`).
 ///
 /// On a **physical device**, `localhost` / `127.0.0.1` is the device itself—use
-/// your dev machine's **LAN IP** and a server bound to `0.0.0.0`. See `.env.example`.
+/// your dev machine's **LAN IP** and a server bound to `0.0.0.0`.
+/// See `.config/config_local.example.json`.
 String apiBaseUrl() {
-  final raw = dotenv.env['API_URL']?.trim();
-  if (raw == null || raw.isEmpty) {
-    throw StateError('API_URL is missing. Copy .env.example to .env and set API_URL.');
+  const raw = String.fromEnvironment('API_URL');
+  final trimmed = raw.trim();
+  if (trimmed.isEmpty) {
+    throw StateError(
+      'API_URL is missing. Run with --dart-define-from-file=.config/config_local.json '
+      '(or config_prod.json). See .config/config_local.example.json.',
+    );
   }
-  return raw.endsWith('/') ? raw.substring(0, raw.length - 1) : raw;
+  return trimmed.endsWith('/') ? trimmed.substring(0, trimmed.length - 1) : trimmed;
 }
 
 /// Default headers for every API call (Dio [BaseOptions.headers]).
 ///
-/// When `API_HOST` is set in `.env`, sends `Host: <value>` for vhost / SNI
+/// When `API_HOST` is set via dart-define, sends `Host: <value>` for vhost / SNI
 /// routing (e.g. Docker Apache hitting an IP but needing a server name).
 Map<String, String> apiRequestHeaders({String? authorizationBearer}) {
   final headers = <String, String>{
@@ -23,9 +26,10 @@ Map<String, String> apiRequestHeaders({String? authorizationBearer}) {
     if (authorizationBearer != null) 'Authorization': 'Bearer $authorizationBearer',
   };
 
-  final host = dotenv.env['API_HOST']?.trim();
-  if (host != null && host.isNotEmpty) {
-    headers['Host'] = host;
+  const host = String.fromEnvironment('API_HOST');
+  final trimmedHost = host.trim();
+  if (trimmedHost.isNotEmpty) {
+    headers['Host'] = trimmedHost;
   }
 
   return headers;
