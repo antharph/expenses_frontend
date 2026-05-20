@@ -1,5 +1,6 @@
 # Local env (see `.env.example`)
 .env
+.config
 
 # Miscellaneous
 *.class
