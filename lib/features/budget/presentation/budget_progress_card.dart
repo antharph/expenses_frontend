@@ -4,11 +4,7 @@ import 'package:intl/intl.dart';
 import '../domain/budget_progress.dart';
 
 class BudgetProgressCard extends StatelessWidget {
-  const BudgetProgressCard({
-    super.key,
-    required this.budget,
-    this.onTap,
-  });
+  const BudgetProgressCard({super.key, required this.budget, this.onTap});
 
   final BudgetProgress budget;
   final VoidCallback? onTap;
@@ -39,6 +35,13 @@ class BudgetProgressCard extends StatelessWidget {
     }
     final rollover = _currencyBreakdown.format(budget.rolloverAmount);
     return '$base Base + $rollover Rollover';
+  }
+
+  String _categoryLabel() {
+    if (budget.categories.isEmpty) {
+      return 'No categories';
+    }
+    return budget.categories.map((category) => category.name).join(', ');
   }
 
   @override
@@ -75,6 +78,15 @@ class BudgetProgressCard extends StatelessWidget {
                   color: scheme.onSurfaceVariant,
                 ),
               ),
+              const SizedBox(height: 8),
+              Text(
+                _categoryLabel(),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: scheme.onSurfaceVariant,
+                ),
+              ),
               const SizedBox(height: 20),
               Text(
                 budget.isOverBudget ? 'Over by' : 'Remaining',
@@ -89,9 +101,7 @@ class BudgetProgressCard extends StatelessWidget {
                 style: theme.textTheme.headlineMedium?.copyWith(
                   fontWeight: FontWeight.w700,
                   letterSpacing: -0.5,
-                  color: budget.isOverBudget
-                      ? scheme.error
-                      : scheme.onSurface,
+                  color: budget.isOverBudget ? scheme.error : scheme.onSurface,
                 ),
               ),
               const SizedBox(height: 16),

@@ -1,7 +1,10 @@
+import '../../expenses/domain/expense_category.dart';
+
 class BudgetProgress {
   const BudgetProgress({
     required this.id,
     required this.name,
+    required this.categories,
     required this.rolloverEnabled,
     required this.periodStart,
     required this.periodEnd,
@@ -15,6 +18,7 @@ class BudgetProgress {
 
   final int id;
   final String name;
+  final List<ExpenseCategory> categories;
   final bool rolloverEnabled;
   final DateTime periodStart;
   final DateTime? periodEnd;
@@ -39,6 +43,7 @@ class BudgetProgress {
     return BudgetProgress(
       id: json['id'] as int,
       name: json['name']?.toString() ?? '',
+      categories: _parseCategories(json['categories']),
       rolloverEnabled: json['rollover_enabled'] == true,
       periodStart: _parseDate(periodMap['start_date']) ?? DateTime.now(),
       periodEnd: _parseDate(periodMap['end_date']),
@@ -53,6 +58,20 @@ class BudgetProgress {
 
   static double _parseAmount(Object? raw) =>
       double.tryParse(raw?.toString() ?? '') ?? 0;
+
+  static List<ExpenseCategory> _parseCategories(Object? raw) {
+    if (raw is! List<dynamic>) {
+      return const [];
+    }
+    return raw
+        .map(
+          (category) => ExpenseCategory.fromJson(
+            Map<String, dynamic>.from(category as Map),
+          ),
+        )
+        .where((category) => category.name.isNotEmpty)
+        .toList();
+  }
 
   static DateTime? _parseDate(Object? raw) {
     if (raw == null) {

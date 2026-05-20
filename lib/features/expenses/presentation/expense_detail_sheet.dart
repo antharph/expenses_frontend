@@ -175,6 +175,10 @@ class _ExpenseDetailSheetState extends ConsumerState<ExpenseDetailSheet> {
     if (!_formKey.currentState!.validate()) {
       return;
     }
+    if (_selectedCategoryId == null) {
+      setState(() => _error = 'Select a category.');
+      return;
+    }
 
     final token = ref.read(sessionProvider).valueOrNull?.token;
     if (token == null) {
@@ -189,15 +193,17 @@ class _ExpenseDetailSheetState extends ConsumerState<ExpenseDetailSheet> {
 
     try {
       final quantity = int.tryParse(_quantityController.text.trim()) ?? 1;
-      final err = await ref.read(expensesListProvider.notifier).updateExpense(
-        id: widget.expense.id,
-        item: _itemController.text.trim(),
-        quantity: quantity,
-        price: _priceController.text.trim(),
-        transactionDate: _apiDate(_transactionAt),
-        transactionTime: _apiTime(_transactionAt),
-        categoryId: _selectedCategoryId,
-      );
+      final err = await ref
+          .read(expensesListProvider.notifier)
+          .updateExpense(
+            id: widget.expense.id,
+            item: _itemController.text.trim(),
+            quantity: quantity,
+            price: _priceController.text.trim(),
+            transactionDate: _apiDate(_transactionAt),
+            transactionTime: _apiTime(_transactionAt),
+            categoryId: _selectedCategoryId,
+          );
       ref.invalidate(dashboardExpenseSummaryProvider);
       if (!mounted) {
         return;
@@ -210,9 +216,9 @@ class _ExpenseDetailSheetState extends ConsumerState<ExpenseDetailSheet> {
         return;
       }
       Navigator.of(context).pop();
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Expense updated.')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Expense updated.')));
     } catch (e) {
       if (!mounted) {
         return;
@@ -299,18 +305,16 @@ class _ExpenseDetailSheetState extends ConsumerState<ExpenseDetailSheet> {
                   ),
                   if (_error != null) ...[
                     const SizedBox(height: 12),
-                    Text(
-                      _error!,
-                      style: TextStyle(color: scheme.error),
-                    ),
+                    Text(_error!, style: TextStyle(color: scheme.error)),
                   ],
                   const SizedBox(height: 16),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.end,
                     children: [
                       TextButton(
-                        onPressed:
-                            _saving ? null : () => Navigator.of(context).pop(),
+                        onPressed: _saving
+                            ? null
+                            : () => Navigator.of(context).pop(),
                         child: Text(
                           'Close',
                           style: TextStyle(color: scheme.onSurfaceVariant),
@@ -323,7 +327,9 @@ class _ExpenseDetailSheetState extends ConsumerState<ExpenseDetailSheet> {
                             ? const SizedBox(
                                 height: 22,
                                 width: 22,
-                                child: CircularProgressIndicator(strokeWidth: 2),
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
                               )
                             : const Text('Save'),
                       ),
@@ -495,7 +501,8 @@ class _CategoryDropdown extends StatelessWidget {
       labelsById.putIfAbsent(category.id, () => category.name);
     }
 
-    if (selectedCategoryId != null && !labelsById.containsKey(selectedCategoryId)) {
+    if (selectedCategoryId != null &&
+        !labelsById.containsKey(selectedCategoryId)) {
       final orphanLabel = fallbackLabel?.trim();
       if (orphanLabel != null && orphanLabel.isNotEmpty) {
         labelsById[selectedCategoryId!] = orphanLabel;
@@ -506,16 +513,12 @@ class _CategoryDropdown extends StatelessWidget {
       ..sort((a, b) => a.value.toLowerCase().compareTo(b.value.toLowerCase()));
 
     final items = <DropdownMenuItem<int?>>[
-      const DropdownMenuItem<int?>(value: null, child: Text('None')),
       for (final entry in sortedEntries)
-        DropdownMenuItem<int?>(
-          value: entry.key,
-          child: Text(entry.value),
-        ),
+        DropdownMenuItem<int?>(value: entry.key, child: Text(entry.value)),
     ];
 
-    final dropdownValue = selectedCategoryId != null &&
-            labelsById.containsKey(selectedCategoryId)
+    final dropdownValue =
+        selectedCategoryId != null && labelsById.containsKey(selectedCategoryId)
         ? selectedCategoryId
         : null;
 
@@ -529,7 +532,7 @@ class _CategoryDropdown extends StatelessWidget {
         child: DropdownButton<int?>(
           value: dropdownValue,
           isExpanded: true,
-          hint: Text(hint ?? 'None'),
+          hint: Text(hint ?? 'Select category'),
           items: items,
           onChanged: enabled ? onChanged : null,
         ),
@@ -563,7 +566,9 @@ class _TransactionDateField extends StatelessWidget {
           border: const OutlineInputBorder(),
           suffixIcon: Icon(
             Icons.calendar_today_outlined,
-            color: enabled ? scheme.onSurfaceVariant : scheme.onSurface.withValues(alpha: 0.38),
+            color: enabled
+                ? scheme.onSurfaceVariant
+                : scheme.onSurface.withValues(alpha: 0.38),
           ),
         ),
         child: Text(

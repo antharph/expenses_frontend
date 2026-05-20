@@ -51,6 +51,10 @@ class _CreateBudgetSheetState extends ConsumerState<CreateBudgetSheet> {
     if (!_formKey.currentState!.validate()) {
       return;
     }
+    if (_selectedCategoryIds.isEmpty) {
+      setState(() => _error = 'Select at least one category.');
+      return;
+    }
     final token = ref.read(sessionProvider).valueOrNull?.token;
     if (token == null) {
       setState(() => _error = 'Not signed in.');
@@ -205,7 +209,7 @@ class _CreateBudgetSheetState extends ConsumerState<CreateBudgetSheet> {
               data: (categories) {
                 if (categories.isEmpty) {
                   return Text(
-                    'No categories yet. You can attach categories later.',
+                    'No categories available. Add categories before creating a budget.',
                     style: theme.textTheme.bodySmall?.copyWith(
                       color: scheme.onSurfaceVariant,
                     ),
@@ -237,7 +241,7 @@ class _CreateBudgetSheetState extends ConsumerState<CreateBudgetSheet> {
               },
               loading: () => const LinearProgressIndicator(),
               error: (error, stackTrace) => Text(
-                'Could not load categories. You can still create a budget.',
+                'Could not load categories. Categories are required.',
                 style: theme.textTheme.bodySmall?.copyWith(color: scheme.error),
               ),
             ),
