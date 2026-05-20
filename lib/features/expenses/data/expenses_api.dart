@@ -118,6 +118,29 @@ class ExpensesApi {
     return response.data ?? <String, dynamic>{};
   }
 
+  Future<Map<String, dynamic>> updateExpense({
+    required String token,
+    required int id,
+    required String item,
+    required int quantity,
+    required String price,
+    required String transactionDate,
+    required String transactionTime,
+  }) async {
+    final client = _jsonClient(token);
+    final response = await client.put<Map<String, dynamic>>(
+      '/api/v1/expenses/$id',
+      data: {
+        'item': item,
+        'quantity': quantity,
+        'price': price,
+        'transaction_date': transactionDate,
+        'transaction_time': transactionTime,
+      },
+    );
+    return response.data ?? <String, dynamic>{};
+  }
+
   Future<void> deleteExpense({
     required String token,
     required int id,

@@ -235,6 +235,63 @@ class ExpensesListNotifier extends Notifier<ExpensesListState> {
     await loadInitial();
   }
 
+  /// Updates the expense locally on success; returns an error message on failure.
+  Future<String?> updateExpense({
+    required int id,
+    required String item,
+    required int quantity,
+    required String price,
+    required String transactionDate,
+    required String transactionTime,
+  }) async {
+    final token = _token;
+    if (token == null) {
+      return 'Not signed in.';
+    }
+
+    final previous = state.items.where((e) => e.id == id).firstOrNull;
+    if (previous == null) {
+      return 'Expense not found.';
+    }
+
+    try {
+      final body = await _api.updateExpense(
+        token: token,
+        id: id,
+        item: item,
+        quantity: quantity,
+        price: price,
+        transactionDate: transactionDate,
+        transactionTime: transactionTime,
+      );
+      final updated = _parseSingleExpense(body);
+      final oldTotal = double.tryParse(previous.total) ?? 0;
+      final newTotal = double.tryParse(updated.total) ?? 0;
+      final delta = newTotal - oldTotal;
+      final nextSum = state.aggregateSumTotal != null
+          ? state.aggregateSumTotal! + delta
+          : null;
+
+      state = state.copyWith(
+        items: state.items.map((e) => e.id == id ? updated : e).toList(),
+        aggregateSumTotal: nextSum,
+      );
+      return null;
+    } on DioException catch (e) {
+      return formatApiError(e);
+    } catch (e) {
+      return e.toString();
+    }
+  }
+
+  Expense _parseSingleExpense(Map<String, dynamic> body) {
+    final raw = body['data'];
+    if (raw is Map) {
+      return Expense.fromJson(Map<String, dynamic>.from(raw));
+    }
+    return Expense.fromJson(body);
+  }
+
   /// Removes the expense locally on success; returns an error message on failure.
   Future<String?> deleteExpense(int id) async {
     final token = _token;
