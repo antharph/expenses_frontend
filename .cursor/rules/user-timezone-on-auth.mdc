@@ -31,5 +31,5 @@ Any **new registration or sign-in** path that creates a user or should refresh `
 
 - Sending `UTC` by default without calling `deviceTimezone()`.
 - Adding a new OAuth/register endpoint without updating **`docs/user-timezone-on-auth.md`**.
-- Using `DEFAULT_TIMEZONE` or `.env` for per-user display timezone.
+- Using `DEFAULT_TIMEZONE` or API config (`.config/*.json`) for per-user display timezone.
 - Relying on hot reload after adding `flutter_timezone` on iOS—require **`pod install`** and a full rebuild (see doc).

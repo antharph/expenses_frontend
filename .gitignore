@@ -1,7 +1,6 @@
-# Local env (see `.env.example`)
+# Local API config (copy from `.config/config_local.example.json`)
 .env
-.config
-.vscode
+.config/config_local.json
 
 # Miscellaneous
 *.class

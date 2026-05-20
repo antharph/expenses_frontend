@@ -1,5 +1,5 @@
 ---
-description: Firebase Google auth, HTTP API layer, and .env configuration (from TECHNICAL_STACK.md)
+description: Firebase Google auth, HTTP API layer, and API config (from TECHNICAL_STACK.md)
 globs: lib/**/*.dart
 alwaysApply: false
 ---
@@ -16,11 +16,12 @@ alwaysApply: false
 - Centralize **base URL**, timeouts, interceptors (auth header, debug logging), and map responses in **typed repositories** or data sources.
 - **Receipt uploads:** use **`multipart/form-data`** or the format the API specifies; respect size limits and permissions UX.
 
-# `.env` configuration
+# API configuration (`.config/*.json`)
 
-- Load **`.env`** at startup (e.g. `flutter_dotenv` with `.env` under `flutter.assets` in `pubspec.yaml`). Commit **`.env.example`** with the same keys and placeholders; avoid committing machine-specific values (LAN IPs, personal hostnames).
-- **Stable keys:** `API_URL` (base URL, typically no trailing slash unless client code expects it), `API_HOST` (hostname for vhost/SNI/`Host` header if the stack needs it).
-- **Runtime networking:** iOS Simulator vs physical device, and Android emulator (**`10.0.2.2`** for host `localhost`) often need **different** `API_URL` / `API_HOST` than a LAN IP—match the target runtime. **`--dart-define`** is fine for CI or flavors when not bundling `.env`.
+- Pass **`--dart-define-from-file=.config/config_local.json`** (dev) or **`config_prod.json`** (prod) on every `flutter run` / `flutter build`. Values are read via **`String.fromEnvironment`** in `lib/core/config/api_config.dart`.
+- Commit **`.config/config_prod.json`** and **`.config/config_local.example.json`**; keep **`.config/config_local.json`** gitignored (LAN IPs, personal hostnames).
+- **Stable keys:** `API_URL` (base URL, typically no trailing slash), `API_HOST` (optional `Host` header for vhost/SNI).
+- **Runtime networking:** iOS Simulator vs physical device, and Android emulator (**`10.0.2.2`** for host `localhost`) often need **different** `API_URL` / `API_HOST` than a LAN IP—match the target runtime.
 
 # Optional stack (add in `pubspec.yaml` when adopted)
 
