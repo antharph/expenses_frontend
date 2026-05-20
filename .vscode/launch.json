@@ -1,0 +1,17 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Mai Expenses (Dev)",
+      "request": "launch",
+      "type": "dart",
+      "toolArgs": ["--dart-define-from-file", ".config/config_local.json"]
+    },
+    {
+      "name": "Mai Expenses (Prod)",
+      "request": "launch",
+      "type": "dart",
+      "toolArgs": ["--dart-define-from-file", ".config/config_prod.json"]
+    }
+  ]
+}
