@@ -1,6 +1,6 @@
 # Local API config (copy from `.config/config_local.example.json`)
 .env
-.config/config_local.json
+.config
 
 # Miscellaneous
 *.class
