@@ -27,9 +27,9 @@ class BudgetProgress {
 
   double get progressFraction {
     if (allocatedAmount <= 0) {
-      return spentAmount > 0 ? 1 : 0;
+      return 0;
     }
-    return (spentAmount / allocatedAmount).clamp(0.0, 1.0);
+    return (remainingAmount / allocatedAmount).clamp(0.0, 1.0);
   }
 
   factory BudgetProgress.fromJson(Map<String, dynamic> json) {
