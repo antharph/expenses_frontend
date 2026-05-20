@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -44,6 +46,9 @@ class AddExpenseSheet extends ConsumerStatefulWidget {
 }
 
 class _AddExpenseSheetState extends ConsumerState<AddExpenseSheet> {
+  static const double _receiptMaxWidth = 1200;
+  static const int _receiptImageQuality = 82;
+
   final _formKey = GlobalKey<FormState>();
   final _itemController = TextEditingController();
   final _quantityController = TextEditingController(text: '1');
@@ -51,6 +56,7 @@ class _AddExpenseSheetState extends ConsumerState<AddExpenseSheet> {
   final _totalController = TextEditingController(text: '0.00');
   XFile? _receipt;
   int? _selectedCategoryId;
+  bool _pickingReceipt = false;
   bool _saving = false;
   String? _error;
 
@@ -91,10 +97,39 @@ class _AddExpenseSheetState extends ConsumerState<AddExpenseSheet> {
   }
 
   Future<void> _pickImage() async {
-    final picker = ImagePicker();
-    final x = await picker.pickImage(source: ImageSource.gallery);
     setState(() {
-      _receipt = x;
+      _pickingReceipt = true;
+      _error = null;
+    });
+
+    final picker = ImagePicker();
+    try {
+      final x = await picker.pickImage(
+        source: ImageSource.gallery,
+        maxWidth: _receiptMaxWidth,
+        imageQuality: _receiptImageQuality,
+      );
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _receipt = x;
+        _pickingReceipt = false;
+      });
+    } catch (e) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _pickingReceipt = false;
+        _error = 'Could not prepare the receipt image.';
+      });
+    }
+  }
+
+  void _removeReceipt() {
+    setState(() {
+      _receipt = null;
       _error = null;
     });
   }
@@ -308,19 +343,27 @@ class _AddExpenseSheetState extends ConsumerState<AddExpenseSheet> {
             ],
             const SizedBox(height: 12),
             OutlinedButton.icon(
-              onPressed: _saving ? null : _pickImage,
-              icon: const Icon(Icons.image_outlined),
+              onPressed: _saving || _pickingReceipt ? null : _pickImage,
+              icon: _pickingReceipt
+                  ? const SizedBox.square(
+                      dimension: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.image_outlined),
               label: Text(
-                _receipt == null
+                _pickingReceipt
+                    ? 'Preparing receipt...'
+                    : _receipt == null
                     ? 'Upload receipt (optional)'
                     : 'Change receipt',
               ),
             ),
             if (_receipt != null) ...[
               const SizedBox(height: 8),
-              Text(
-                _filenameFromPath(_receipt!.path),
-                style: Theme.of(context).textTheme.bodySmall,
+              _ReceiptPreview(
+                file: File(_receipt!.path),
+                filename: _filenameFromPath(_receipt!.path),
+                onRemove: _saving ? null : _removeReceipt,
               ),
             ],
             if (_error != null) ...[
@@ -340,6 +383,80 @@ class _AddExpenseSheetState extends ConsumerState<AddExpenseSheet> {
                       child: CircularProgressIndicator(strokeWidth: 2),
                     )
                   : const Text('Save'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ReceiptPreview extends StatelessWidget {
+  const _ReceiptPreview({
+    required this.file,
+    required this.filename,
+    required this.onRemove,
+  });
+
+  final File file;
+  final String filename;
+  final VoidCallback? onRemove;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
+
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        border: Border.all(color: colorScheme.outlineVariant),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(8),
+        child: Row(
+          children: [
+            ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child: Image.file(
+                file,
+                width: 64,
+                height: 64,
+                fit: BoxFit.cover,
+                errorBuilder: (context, error, stackTrace) => Container(
+                  width: 64,
+                  height: 64,
+                  color: colorScheme.surfaceContainerHighest,
+                  child: Icon(
+                    Icons.broken_image_outlined,
+                    color: colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text('Receipt selected', style: textTheme.labelLarge),
+                  const SizedBox(height: 2),
+                  Text(
+                    filename,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: textTheme.bodySmall?.copyWith(
+                      color: colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            IconButton(
+              tooltip: 'Remove receipt',
+              onPressed: onRemove,
+              icon: const Icon(Icons.close),
             ),
           ],
         ),
