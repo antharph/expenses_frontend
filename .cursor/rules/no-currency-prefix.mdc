@@ -1,0 +1,23 @@
+---
+description: Format monetary amounts without hardcoded currency symbols
+globs: lib/**/*.dart
+alwaysApply: false
+---
+
+# Amount display (no currency prefix)
+
+This app is used across regions with different currencies. **Do not** prefix amounts with `$`, `€`, `£`, or other locale-specific currency symbols in UI unless the API explicitly provides a per-user or per-record currency code and product requires showing it.
+
+## Formatting
+
+- Prefer **`NumberFormat.currency(symbol: '', decimalDigits: …)`** (or an equivalent decimal formatter) for numeric totals from the API.
+- For amounts already formatted as strings from the API (e.g. expense line `total`), display them **as returned**—do not prepend symbols in the client.
+- Avoid `NumberFormat.simpleCurrency()` / default `NumberFormat.currency()` without `symbol: ''`—they inject the device locale’s symbol.
+
+## Layout
+
+- In list rows (date · description · amount), let the **amount column size to its content**; use `Expanded` only on the description so labels are not clipped early by a fixed-width amount column.
+
+## When symbols are allowed
+
+- Only if product adds explicit multi-currency support (API field + user setting) and design calls for showing that code/symbol—document the exception in the feature, not ad hoc `$` in widgets.

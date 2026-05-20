@@ -165,10 +165,7 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen> {
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Text(
-                            list.initialError!,
-                            textAlign: TextAlign.center,
-                          ),
+                          Text(list.initialError!, textAlign: TextAlign.center),
                           const SizedBox(height: 16),
                           FilledButton(
                             onPressed: () => ref
@@ -367,7 +364,10 @@ class _ExpensesSummaryBar extends StatelessWidget {
   final int loadedCount;
 
   static final _rangeFormat = DateFormat.yMMMd();
-  static final _currency = NumberFormat.currency(symbol: r'$', decimalDigits: 2);
+  static final _amountFormat = NumberFormat.currency(
+    symbol: r'',
+    decimalDigits: 2,
+  );
 
   String _scopeLabel() {
     if (hasDateFilter && rangeStart != null && rangeEnd != null) {
@@ -425,7 +425,7 @@ class _ExpensesSummaryBar extends StatelessWidget {
                       const Spacer(),
                       if (sumTotal != null)
                         Text(
-                          _currency.format(sumTotal),
+                          _amountFormat.format(sumTotal),
                           style: theme.textTheme.titleMedium?.copyWith(
                             fontWeight: FontWeight.w700,
                             fontFeatures: const [FontFeature.tabularFigures()],
@@ -477,8 +477,7 @@ class _ExpenseRow extends ConsumerWidget {
   final String Function(String iso) formatDate;
 
   static const double _cardRadius = 12;
-  static const double _dateColumnWidth = 96;
-  static const double _amountColumnWidth = 108;
+  static const double _dateColumnWidth = 88;
 
   Future<void> _confirmDelete(BuildContext context, WidgetRef ref) async {
     final confirmed = await showDialog<bool>(
@@ -548,7 +547,7 @@ class _ExpenseRow extends ConsumerWidget {
               SizedBox(
                 width: _dateColumnWidth,
                 child: Text(
-                  formatDate(expense.dateIso),
+                  formatDate(expense.transactionAtIso ?? expense.dateIso),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: theme.textTheme.bodySmall?.copyWith(
@@ -556,6 +555,7 @@ class _ExpenseRow extends ConsumerWidget {
                   ),
                 ),
               ),
+              const SizedBox(width: 8),
               Expanded(
                 child: Text(
                   expense.item,
@@ -564,16 +564,12 @@ class _ExpenseRow extends ConsumerWidget {
                   style: theme.textTheme.titleSmall,
                 ),
               ),
-              const SizedBox(width: 12),
-              SizedBox(
-                width: _amountColumnWidth,
-                child: Text(
-                  expense.total,
-                  textAlign: TextAlign.right,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: amountStyle,
-                ),
+              const SizedBox(width: 8),
+              Text(
+                expense.total,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: amountStyle,
               ),
             ],
           ),

@@ -13,6 +13,8 @@ import '../application/categories_provider.dart';
 import '../application/expenses_list_notifier.dart';
 import '../data/expenses_api.dart';
 
+enum _ExpenseEntryMode { receipt, manual }
+
 class _MinQuantityInputFormatter extends TextInputFormatter {
   @override
   TextEditingValue formatEditUpdate(
@@ -54,6 +56,7 @@ class _AddExpenseSheetState extends ConsumerState<AddExpenseSheet> {
   final _quantityController = TextEditingController(text: '1');
   final _priceController = TextEditingController();
   final _totalController = TextEditingController(text: '0.00');
+  _ExpenseEntryMode _entryMode = _ExpenseEntryMode.receipt;
   XFile? _receipt;
   int? _selectedCategoryId;
   bool _pickingReceipt = false;
@@ -134,8 +137,31 @@ class _AddExpenseSheetState extends ConsumerState<AddExpenseSheet> {
     });
   }
 
+  void _setEntryMode(_ExpenseEntryMode mode) {
+    if (mode == _entryMode || _saving) {
+      return;
+    }
+    setState(() {
+      _entryMode = mode;
+      _error = null;
+      if (mode == _ExpenseEntryMode.manual) {
+        _receipt = null;
+      } else {
+        _itemController.clear();
+        _quantityController.text = '1';
+        _priceController.clear();
+        _totalController.text = '0.00';
+      }
+    });
+  }
+
   Future<void> _save() async {
-    if (!_formKey.currentState!.validate()) {
+    if (_entryMode == _ExpenseEntryMode.receipt) {
+      if (_receipt == null) {
+        setState(() => _error = 'Select a receipt image to continue.');
+        return;
+      }
+    } else if (!_formKey.currentState!.validate()) {
       return;
     }
     final token = ref.read(sessionProvider).valueOrNull?.token;
@@ -152,15 +178,15 @@ class _AddExpenseSheetState extends ConsumerState<AddExpenseSheet> {
     try {
       final api = ref.read(expensesApiProvider);
       final receipt = _receipt;
-      final hasReceipt = receipt != null && receipt.path.isNotEmpty;
+      final isReceiptMode = _entryMode == _ExpenseEntryMode.receipt;
       final quantity = int.tryParse(_quantityController.text.trim()) ?? 1;
       await api.createExpense(
         token: token,
-        item: hasReceipt ? null : _itemController.text.trim(),
-        quantity: hasReceipt ? null : quantity,
-        price: hasReceipt ? null : _priceController.text.trim(),
-        receiptFilePath: receipt?.path,
-        receiptFilename: receipt != null
+        item: isReceiptMode ? null : _itemController.text.trim(),
+        quantity: isReceiptMode ? null : quantity,
+        price: isReceiptMode ? null : _priceController.text.trim(),
+        receiptFilePath: isReceiptMode ? receipt?.path : null,
+        receiptFilename: isReceiptMode && receipt != null
             ? _filenameFromPath(receipt.path)
             : null,
         categoryId: _selectedCategoryId,
@@ -202,6 +228,25 @@ class _AddExpenseSheetState extends ConsumerState<AddExpenseSheet> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Text('New expense', style: Theme.of(context).textTheme.titleLarge),
+            const SizedBox(height: 16),
+            SegmentedButton<_ExpenseEntryMode>(
+              segments: const [
+                ButtonSegment(
+                  value: _ExpenseEntryMode.receipt,
+                  label: Text('Receipt'),
+                  icon: Icon(Icons.receipt_long_outlined),
+                ),
+                ButtonSegment(
+                  value: _ExpenseEntryMode.manual,
+                  label: Text('Manual'),
+                  icon: Icon(Icons.edit_outlined),
+                ),
+              ],
+              selected: {_entryMode},
+              onSelectionChanged: _saving
+                  ? null
+                  : (selection) => _setEntryMode(selection.first),
+            ),
             const SizedBox(height: 16),
             categoriesAsync.when(
               data: (categories) => InputDecorator(
@@ -257,113 +302,43 @@ class _AddExpenseSheetState extends ConsumerState<AddExpenseSheet> {
                 ),
               ),
             ),
-            const SizedBox(height: 12),
-            TextFormField(
-              controller: _itemController,
-              textInputAction: TextInputAction.next,
-              decoration: const InputDecoration(
-                labelText: 'Item',
-                border: OutlineInputBorder(),
-              ),
-              validator: (v) {
-                if (_receipt != null) {
-                  return null;
-                }
-                if (v == null || v.trim().isEmpty) {
-                  return 'Enter an item name.';
-                }
-                return null;
-              },
-            ),
-            const SizedBox(height: 12),
-            TextFormField(
-              controller: _quantityController,
-              keyboardType: TextInputType.number,
-              inputFormatters: [
-                FilteringTextInputFormatter.digitsOnly,
-                _MinQuantityInputFormatter(),
+            const SizedBox(height: 16),
+            if (_entryMode == _ExpenseEntryMode.receipt) ...[
+              if (_receipt == null)
+                _ReceiptUploadSection(
+                  picking: _pickingReceipt,
+                  saving: _saving,
+                  onPick: _pickImage,
+                )
+              else ...[
+                _ReceiptPreview(
+                  file: File(_receipt!.path),
+                  filename: _filenameFromPath(_receipt!.path),
+                  onRemove: _saving ? null : _removeReceipt,
+                ),
+                const SizedBox(height: 8),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: TextButton.icon(
+                    onPressed: _saving || _pickingReceipt ? null : _pickImage,
+                    icon: _pickingReceipt
+                        ? const SizedBox.square(
+                            dimension: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.swap_horiz),
+                    label: Text(
+                      _pickingReceipt ? 'Preparing…' : 'Change receipt',
+                    ),
+                  ),
+                ),
               ],
-              textInputAction: TextInputAction.next,
-              decoration: const InputDecoration(
-                labelText: 'Quantity',
-                border: OutlineInputBorder(),
-              ),
-              validator: (v) {
-                if (_receipt != null) {
-                  return null;
-                }
-                final n = int.tryParse(v?.trim() ?? '');
-                if (n == null || n < 1) {
-                  return 'Quantity must be at least 1.';
-                }
-                return null;
-              },
-            ),
-            const SizedBox(height: 12),
-            TextFormField(
-              controller: _priceController,
-              keyboardType: const TextInputType.numberWithOptions(
-                decimal: true,
-              ),
-              textInputAction: TextInputAction.next,
-              decoration: const InputDecoration(
-                labelText: 'Price',
-                border: OutlineInputBorder(),
-              ),
-              validator: (v) {
-                if (_receipt != null) {
-                  return null;
-                }
-                if (v == null || v.trim().isEmpty) {
-                  return 'Enter a price.';
-                }
-                final n = num.tryParse(v.trim());
-                if (n == null || n < 0) {
-                  return 'Enter a valid non-negative number.';
-                }
-                return null;
-              },
-            ),
-            const SizedBox(height: 12),
-            TextFormField(
-              controller: _totalController,
-              readOnly: true,
-              enableInteractiveSelection: false,
-              decoration: const InputDecoration(
-                labelText: 'Total',
-                border: OutlineInputBorder(),
-              ),
-            ),
-            if (_receipt != null) ...[
-              const SizedBox(height: 8),
-              Text(
-                'Item, quantity, price, and total will be read from the receipt.',
-                style: Theme.of(context).textTheme.bodySmall,
-              ),
-            ],
-            const SizedBox(height: 12),
-            OutlinedButton.icon(
-              onPressed: _saving || _pickingReceipt ? null : _pickImage,
-              icon: _pickingReceipt
-                  ? const SizedBox.square(
-                      dimension: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Icon(Icons.image_outlined),
-              label: Text(
-                _pickingReceipt
-                    ? 'Preparing receipt...'
-                    : _receipt == null
-                    ? 'Upload receipt (optional)'
-                    : 'Change receipt',
-              ),
-            ),
-            if (_receipt != null) ...[
-              const SizedBox(height: 8),
-              _ReceiptPreview(
-                file: File(_receipt!.path),
-                filename: _filenameFromPath(_receipt!.path),
-                onRemove: _saving ? null : _removeReceipt,
+            ] else ...[
+              _ManualEntryFields(
+                itemController: _itemController,
+                quantityController: _quantityController,
+                priceController: _priceController,
+                totalController: _totalController,
               ),
             ],
             if (_error != null) ...[
@@ -375,18 +350,182 @@ class _AddExpenseSheetState extends ConsumerState<AddExpenseSheet> {
             ],
             const SizedBox(height: 20),
             FilledButton(
-              onPressed: _saving ? null : _save,
+              onPressed: _saving ||
+                      (_entryMode == _ExpenseEntryMode.receipt &&
+                          _receipt == null)
+                  ? null
+                  : _save,
               child: _saving
                   ? const SizedBox(
                       height: 22,
                       width: 22,
                       child: CircularProgressIndicator(strokeWidth: 2),
                     )
-                  : const Text('Save'),
+                  : Text(
+                      _entryMode == _ExpenseEntryMode.receipt
+                          ? 'Save from receipt'
+                          : 'Save expense',
+                    ),
             ),
           ],
         ),
       ),
+    );
+  }
+}
+
+class _ReceiptUploadSection extends StatelessWidget {
+  const _ReceiptUploadSection({
+    required this.picking,
+    required this.saving,
+    required this.onPick,
+  });
+
+  final bool picking;
+  final bool saving;
+  final VoidCallback onPick;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
+    final enabled = !picking && !saving;
+
+    return Material(
+      color: colorScheme.surfaceContainerLow,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(color: colorScheme.outlineVariant),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: enabled ? onPick : null,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 28),
+          child: Column(
+            children: [
+              if (picking)
+                SizedBox.square(
+                  dimension: 40,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2.5,
+                    color: colorScheme.primary,
+                  ),
+                )
+              else
+                Icon(
+                  Icons.add_a_photo_outlined,
+                  size: 40,
+                  color: enabled
+                      ? colorScheme.primary
+                      : colorScheme.onSurface.withValues(alpha: 0.38),
+                ),
+              const SizedBox(height: 12),
+              Text(
+                picking ? 'Preparing receipt…' : 'Upload receipt',
+                style: textTheme.titleMedium,
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'Item, quantity, price, and total are read from the image.',
+                style: textTheme.bodySmall?.copyWith(
+                  color: colorScheme.onSurfaceVariant,
+                ),
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ManualEntryFields extends StatelessWidget {
+  const _ManualEntryFields({
+    required this.itemController,
+    required this.quantityController,
+    required this.priceController,
+    required this.totalController,
+  });
+
+  final TextEditingController itemController;
+  final TextEditingController quantityController;
+  final TextEditingController priceController;
+  final TextEditingController totalController;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        TextFormField(
+          controller: itemController,
+          textInputAction: TextInputAction.next,
+          decoration: const InputDecoration(
+            labelText: 'Item',
+            border: OutlineInputBorder(),
+          ),
+          validator: (v) {
+            if (v == null || v.trim().isEmpty) {
+              return 'Enter an item name.';
+            }
+            return null;
+          },
+        ),
+        const SizedBox(height: 12),
+        TextFormField(
+          controller: quantityController,
+          keyboardType: TextInputType.number,
+          inputFormatters: [
+            FilteringTextInputFormatter.digitsOnly,
+            _MinQuantityInputFormatter(),
+          ],
+          textInputAction: TextInputAction.next,
+          decoration: const InputDecoration(
+            labelText: 'Quantity',
+            border: OutlineInputBorder(),
+          ),
+          validator: (v) {
+            final n = int.tryParse(v?.trim() ?? '');
+            if (n == null || n < 1) {
+              return 'Quantity must be at least 1.';
+            }
+            return null;
+          },
+        ),
+        const SizedBox(height: 12),
+        TextFormField(
+          controller: priceController,
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          textInputAction: TextInputAction.next,
+          decoration: const InputDecoration(
+            labelText: 'Price',
+            border: OutlineInputBorder(),
+          ),
+          validator: (v) {
+            if (v == null || v.trim().isEmpty) {
+              return 'Enter a price.';
+            }
+            final n = num.tryParse(v.trim());
+            if (n == null || n < 0) {
+              return 'Enter a valid non-negative number.';
+            }
+            return null;
+          },
+        ),
+        const SizedBox(height: 12),
+        TextFormField(
+          controller: totalController,
+          readOnly: true,
+          enableInteractiveSelection: false,
+          decoration: const InputDecoration(
+            labelText: 'Total',
+            border: OutlineInputBorder(),
+          ),
+        ),
+      ],
     );
   }
 }

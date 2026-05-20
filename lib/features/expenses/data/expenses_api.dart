@@ -126,6 +126,7 @@ class ExpensesApi {
     required String price,
     required String transactionDate,
     required String transactionTime,
+    int? categoryId,
   }) async {
     final client = _jsonClient(token);
     final response = await client.put<Map<String, dynamic>>(
@@ -136,6 +137,7 @@ class ExpensesApi {
         'price': price,
         'transaction_date': transactionDate,
         'transaction_time': transactionTime,
+        'category_id': categoryId,
       },
     );
     return response.data ?? <String, dynamic>{};

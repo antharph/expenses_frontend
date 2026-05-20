@@ -5,8 +5,10 @@ import 'package:intl/intl.dart';
 
 import '../../auth/application/session_notifier.dart';
 import '../../dashboard/application/dashboard_expense_summary_provider.dart';
+import '../application/categories_provider.dart';
 import '../application/expenses_list_notifier.dart';
 import '../domain/expense.dart';
+import '../domain/expense_category.dart';
 import '../domain/expense_date.dart';
 
 void showExpenseDetailSheet(BuildContext context, Expense expense) {
@@ -59,6 +61,7 @@ class _ExpenseDetailSheetState extends ConsumerState<ExpenseDetailSheet> {
   late final TextEditingController _priceController;
   late final TextEditingController _totalController;
   late DateTime _transactionAt;
+  late int? _selectedCategoryId;
 
   static final _transactionLabelFormat = DateFormat.yMMMd().add_jm();
 
@@ -74,6 +77,7 @@ class _ExpenseDetailSheetState extends ConsumerState<ExpenseDetailSheet> {
     _priceController = TextEditingController(text: expense.price);
     _totalController = TextEditingController(text: expense.total);
     _transactionAt = _initialTransactionAt(expense);
+    _selectedCategoryId = expense.categoryId;
     _priceController.addListener(_syncTotal);
     _quantityController.addListener(_syncTotal);
   }
@@ -192,6 +196,7 @@ class _ExpenseDetailSheetState extends ConsumerState<ExpenseDetailSheet> {
         price: _priceController.text.trim(),
         transactionDate: _apiDate(_transactionAt),
         transactionTime: _apiTime(_transactionAt),
+        categoryId: _selectedCategoryId,
       );
       ref.invalidate(dashboardExpenseSummaryProvider);
       if (!mounted) {
@@ -224,6 +229,8 @@ class _ExpenseDetailSheetState extends ConsumerState<ExpenseDetailSheet> {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final storeName = widget.expense.storeName?.trim();
+    final categoriesAsync = ref.watch(expenseCategoriesProvider);
+    final maxSheetHeight = MediaQuery.sizeOf(context).height * 0.65;
 
     return SafeArea(
       child: Padding(
@@ -233,134 +240,298 @@ class _ExpenseDetailSheetState extends ConsumerState<ExpenseDetailSheet> {
           24,
           24 + MediaQuery.viewInsetsOf(context).bottom,
         ),
-        child: Form(
-          key: _formKey,
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Text(
-                  'Expense details',
-                  style: theme.textTheme.titleLarge?.copyWith(
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                const SizedBox(height: 20),
-                if (storeName != null && storeName.isNotEmpty) ...[
-                  _ReadOnlyField(label: 'Store', value: storeName),
-                  const SizedBox(height: 12),
-                ],
-                TextFormField(
-                  controller: _itemController,
-                  textInputAction: TextInputAction.next,
-                  enabled: !_saving,
-                  decoration: const InputDecoration(
-                    labelText: 'Item',
-                    border: OutlineInputBorder(),
-                  ),
-                  validator: (v) {
-                    if (v == null || v.trim().isEmpty) {
-                      return 'Enter an item name.';
-                    }
-                    return null;
-                  },
-                ),
-                const SizedBox(height: 12),
-                TextFormField(
-                  controller: _quantityController,
-                  keyboardType: TextInputType.number,
-                  enabled: !_saving,
-                  inputFormatters: [
-                    FilteringTextInputFormatter.digitsOnly,
-                    _MinQuantityInputFormatter(),
-                  ],
-                  textInputAction: TextInputAction.next,
-                  decoration: const InputDecoration(
-                    labelText: 'Quantity',
-                    border: OutlineInputBorder(),
-                  ),
-                  validator: (v) {
-                    final n = int.tryParse(v?.trim() ?? '');
-                    if (n == null || n < 1) {
-                      return 'Quantity must be at least 1.';
-                    }
-                    return null;
-                  },
-                ),
-                const SizedBox(height: 12),
-                TextFormField(
-                  controller: _priceController,
-                  keyboardType: const TextInputType.numberWithOptions(
-                    decimal: true,
-                  ),
-                  enabled: !_saving,
-                  textInputAction: TextInputAction.next,
-                  decoration: const InputDecoration(
-                    labelText: 'Price',
-                    border: OutlineInputBorder(),
-                  ),
-                  validator: (v) {
-                    if (v == null || v.trim().isEmpty) {
-                      return 'Enter a price.';
-                    }
-                    final n = num.tryParse(v.trim());
-                    if (n == null || n < 0) {
-                      return 'Enter a valid non-negative number.';
-                    }
-                    return null;
-                  },
-                ),
-                const SizedBox(height: 12),
-                TextFormField(
-                  controller: _totalController,
-                  readOnly: true,
-                  enableInteractiveSelection: false,
-                  decoration: const InputDecoration(
-                    labelText: 'Total',
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                _TransactionDateField(
-                  label: _formatTransactionLabel(),
-                  enabled: !_saving,
-                  onTap: _pickTransactionDateTime,
-                ),
-                if (_error != null) ...[
-                  const SizedBox(height: 12),
+        child: ConstrainedBox(
+          constraints: BoxConstraints(maxHeight: maxSheetHeight),
+          child: Form(
+            key: _formKey,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
                   Text(
-                    _error!,
-                    style: TextStyle(color: scheme.error),
-                  ),
-                ],
-                const SizedBox(height: 16),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    TextButton(
-                      onPressed: _saving ? null : () => Navigator.of(context).pop(),
-                      child: Text(
-                        'Close',
-                        style: TextStyle(color: scheme.onSurfaceVariant),
-                      ),
+                    'Expense details',
+                    style: theme.textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.w600,
                     ),
-                    const SizedBox(width: 8),
-                    FilledButton(
-                      onPressed: _saving ? null : _save,
-                      child: _saving
-                          ? const SizedBox(
-                              height: 22,
-                              width: 22,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : const Text('Save'),
+                  ),
+                  const SizedBox(height: 16),
+                  if (storeName != null && storeName.isNotEmpty) ...[
+                    _ReadOnlyField(label: 'Store', value: storeName),
+                    const SizedBox(height: 12),
+                  ],
+                  TextFormField(
+                    controller: _itemController,
+                    textInputAction: TextInputAction.next,
+                    enabled: !_saving,
+                    decoration: const InputDecoration(
+                      labelText: 'Item',
+                      border: OutlineInputBorder(),
+                    ),
+                    validator: (v) {
+                      if (v == null || v.trim().isEmpty) {
+                        return 'Enter an item name.';
+                      }
+                      return null;
+                    },
+                  ),
+                  const SizedBox(height: 12),
+                  _AmountFieldsRow(
+                    quantityController: _quantityController,
+                    priceController: _priceController,
+                    totalController: _totalController,
+                    enabled: !_saving,
+                  ),
+                  const SizedBox(height: 12),
+                  _CategoryField(
+                    categoriesAsync: categoriesAsync,
+                    selectedCategoryId: _selectedCategoryId,
+                    currentCategoryName: widget.expense.categoryName,
+                    enabled: !_saving,
+                    onChanged: (value) =>
+                        setState(() => _selectedCategoryId = value),
+                  ),
+                  const SizedBox(height: 12),
+                  _TransactionDateField(
+                    label: _formatTransactionLabel(),
+                    enabled: !_saving,
+                    onTap: _pickTransactionDateTime,
+                  ),
+                  if (_error != null) ...[
+                    const SizedBox(height: 12),
+                    Text(
+                      _error!,
+                      style: TextStyle(color: scheme.error),
                     ),
                   ],
-                ),
-              ],
+                  const SizedBox(height: 16),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      TextButton(
+                        onPressed:
+                            _saving ? null : () => Navigator.of(context).pop(),
+                        child: Text(
+                          'Close',
+                          style: TextStyle(color: scheme.onSurfaceVariant),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      FilledButton(
+                        onPressed: _saving ? null : _save,
+                        child: _saving
+                            ? const SizedBox(
+                                height: 22,
+                                width: 22,
+                                child: CircularProgressIndicator(strokeWidth: 2),
+                              )
+                            : const Text('Save'),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
             ),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class _AmountFieldsRow extends StatelessWidget {
+  const _AmountFieldsRow({
+    required this.quantityController,
+    required this.priceController,
+    required this.totalController,
+    required this.enabled,
+  });
+
+  final TextEditingController quantityController;
+  final TextEditingController priceController;
+  final TextEditingController totalController;
+  final bool enabled;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(
+          width: 88,
+          child: TextFormField(
+            controller: quantityController,
+            keyboardType: TextInputType.number,
+            enabled: enabled,
+            inputFormatters: [
+              FilteringTextInputFormatter.digitsOnly,
+              _MinQuantityInputFormatter(),
+            ],
+            textInputAction: TextInputAction.next,
+            decoration: const InputDecoration(
+              labelText: 'Qty',
+              border: OutlineInputBorder(),
+              isDense: true,
+            ),
+            validator: (v) {
+              final n = int.tryParse(v?.trim() ?? '');
+              if (n == null || n < 1) {
+                return 'Min 1';
+              }
+              return null;
+            },
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: TextFormField(
+            controller: priceController,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            enabled: enabled,
+            textInputAction: TextInputAction.next,
+            decoration: const InputDecoration(
+              labelText: 'Price',
+              border: OutlineInputBorder(),
+              isDense: true,
+            ),
+            validator: (v) {
+              if (v == null || v.trim().isEmpty) {
+                return 'Required';
+              }
+              final n = num.tryParse(v.trim());
+              if (n == null || n < 0) {
+                return 'Invalid';
+              }
+              return null;
+            },
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: TextFormField(
+            controller: totalController,
+            readOnly: true,
+            enableInteractiveSelection: false,
+            decoration: const InputDecoration(
+              labelText: 'Total',
+              border: OutlineInputBorder(),
+              isDense: true,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _CategoryField extends StatelessWidget {
+  const _CategoryField({
+    required this.categoriesAsync,
+    required this.selectedCategoryId,
+    required this.currentCategoryName,
+    required this.enabled,
+    required this.onChanged,
+  });
+
+  final AsyncValue<List<ExpenseCategory>> categoriesAsync;
+  final int? selectedCategoryId;
+  final String? currentCategoryName;
+  final bool enabled;
+  final ValueChanged<int?> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return categoriesAsync.when(
+      data: (categories) => _CategoryDropdown(
+        categories: categories,
+        selectedCategoryId: selectedCategoryId,
+        enabled: enabled,
+        onChanged: onChanged,
+      ),
+      loading: () => _CategoryDropdown(
+        categories: const [],
+        selectedCategoryId: selectedCategoryId,
+        enabled: false,
+        hint: currentCategoryName?.trim().isNotEmpty == true
+            ? currentCategoryName!.trim()
+            : 'Loading…',
+        onChanged: onChanged,
+      ),
+      error: (Object error, StackTrace stackTrace) => _CategoryDropdown(
+        categories: const [],
+        selectedCategoryId: selectedCategoryId,
+        enabled: enabled,
+        helperText: 'Could not load categories.',
+        fallbackLabel: currentCategoryName?.trim(),
+        onChanged: onChanged,
+      ),
+    );
+  }
+}
+
+class _CategoryDropdown extends StatelessWidget {
+  const _CategoryDropdown({
+    required this.categories,
+    required this.selectedCategoryId,
+    required this.enabled,
+    required this.onChanged,
+    this.hint,
+    this.helperText,
+    this.fallbackLabel,
+  });
+
+  final List<ExpenseCategory> categories;
+  final int? selectedCategoryId;
+  final bool enabled;
+  final ValueChanged<int?> onChanged;
+  final String? hint;
+  final String? helperText;
+  final String? fallbackLabel;
+
+  @override
+  Widget build(BuildContext context) {
+    final labelsById = <int, String>{};
+    for (final category in categories) {
+      labelsById.putIfAbsent(category.id, () => category.name);
+    }
+
+    if (selectedCategoryId != null && !labelsById.containsKey(selectedCategoryId)) {
+      final orphanLabel = fallbackLabel?.trim();
+      if (orphanLabel != null && orphanLabel.isNotEmpty) {
+        labelsById[selectedCategoryId!] = orphanLabel;
+      }
+    }
+
+    final sortedEntries = labelsById.entries.toList()
+      ..sort((a, b) => a.value.toLowerCase().compareTo(b.value.toLowerCase()));
+
+    final items = <DropdownMenuItem<int?>>[
+      const DropdownMenuItem<int?>(value: null, child: Text('None')),
+      for (final entry in sortedEntries)
+        DropdownMenuItem<int?>(
+          value: entry.key,
+          child: Text(entry.value),
+        ),
+    ];
+
+    final dropdownValue = selectedCategoryId != null &&
+            labelsById.containsKey(selectedCategoryId)
+        ? selectedCategoryId
+        : null;
+
+    return InputDecorator(
+      decoration: InputDecoration(
+        labelText: 'Category',
+        border: const OutlineInputBorder(),
+        helperText: helperText,
+      ),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<int?>(
+          value: dropdownValue,
+          isExpanded: true,
+          hint: Text(hint ?? 'None'),
+          items: items,
+          onChanged: enabled ? onChanged : null,
         ),
       ),
     );

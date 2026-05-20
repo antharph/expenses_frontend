@@ -48,7 +48,7 @@ class ExpensesListState {
     return items
         .where(
           (e) => expenseMatchesDateRange(
-            e.dateIso,
+            e.transactionAtIso ?? e.dateIso,
             rangeStart: dateRangeStart,
             rangeEnd: dateRangeEnd,
           ),
@@ -75,7 +75,9 @@ class ExpensesListState {
       items: items ?? this.items,
       isLoadingInitial: isLoadingInitial ?? this.isLoadingInitial,
       isLoadingMore: isLoadingMore ?? this.isLoadingMore,
-      initialError: clearInitialError ? null : (initialError ?? this.initialError),
+      initialError: clearInitialError
+          ? null
+          : (initialError ?? this.initialError),
       hasMore: hasMore ?? this.hasMore,
       loadedPage: loadedPage ?? this.loadedPage,
       dateRangeStart: clearDateRange
@@ -93,7 +95,9 @@ class ExpensesListState {
 }
 
 final expensesListProvider =
-    NotifierProvider<ExpensesListNotifier, ExpensesListState>(ExpensesListNotifier.new);
+    NotifierProvider<ExpensesListNotifier, ExpensesListState>(
+      ExpensesListNotifier.new,
+    );
 
 class ExpensesListNotifier extends Notifier<ExpensesListState> {
   @override
@@ -133,14 +137,15 @@ class ExpensesListNotifier extends Notifier<ExpensesListState> {
   DateTime _dateOnly(DateTime value) =>
       DateTime(value.year, value.month, value.day);
 
-  String? _apiDate(DateTime? value) {
+  String? _apiDateTime(DateTime? value, {required bool endOfDay}) {
     if (value == null) {
       return null;
     }
     final y = value.year.toString().padLeft(4, '0');
     final m = value.month.toString().padLeft(2, '0');
     final d = value.day.toString().padLeft(2, '0');
-    return '$y-$m-$d';
+    final time = endOfDay ? '23:59:59' : '00:00:00';
+    return '$y-$m-$d $time';
   }
 
   Future<void> loadInitial() async {
@@ -165,8 +170,8 @@ class ExpensesListNotifier extends Notifier<ExpensesListState> {
       final body = await _api.listExpenses(
         token: token,
         page: 1,
-        from: _apiDate(state.dateRangeStart),
-        to: _apiDate(state.dateRangeEnd),
+        from: _apiDateTime(state.dateRangeStart, endOfDay: false),
+        to: _apiDateTime(state.dateRangeEnd, endOfDay: true),
       );
       final parsed = _parsePage(body, appendTo: const []);
       state = state.copyWith(
@@ -198,7 +203,10 @@ class ExpensesListNotifier extends Notifier<ExpensesListState> {
 
   Future<void> _loadNextPage() async {
     final token = _token;
-    if (token == null || !state.hasMore || state.isLoadingMore || state.isLoadingInitial) {
+    if (token == null ||
+        !state.hasMore ||
+        state.isLoadingMore ||
+        state.isLoadingInitial) {
       return;
     }
     if (state.loadedPage == 0) {
@@ -212,8 +220,8 @@ class ExpensesListNotifier extends Notifier<ExpensesListState> {
       final body = await _api.listExpenses(
         token: token,
         page: nextPage,
-        from: _apiDate(state.dateRangeStart),
-        to: _apiDate(state.dateRangeEnd),
+        from: _apiDateTime(state.dateRangeStart, endOfDay: false),
+        to: _apiDateTime(state.dateRangeEnd, endOfDay: true),
       );
       final parsed = _parsePage(body, appendTo: state.items);
       state = state.copyWith(
@@ -225,7 +233,10 @@ class ExpensesListNotifier extends Notifier<ExpensesListState> {
         aggregateSumTotal: parsed.aggregateSumTotal,
       );
     } on DioException catch (e) {
-      state = state.copyWith(isLoadingMore: false, initialError: formatApiError(e));
+      state = state.copyWith(
+        isLoadingMore: false,
+        initialError: formatApiError(e),
+      );
     } catch (e) {
       state = state.copyWith(isLoadingMore: false, initialError: e.toString());
     }
@@ -243,6 +254,7 @@ class ExpensesListNotifier extends Notifier<ExpensesListState> {
     required String price,
     required String transactionDate,
     required String transactionTime,
+    int? categoryId,
   }) async {
     final token = _token;
     if (token == null) {
@@ -263,6 +275,7 @@ class ExpensesListNotifier extends Notifier<ExpensesListState> {
         price: price,
         transactionDate: transactionDate,
         transactionTime: transactionTime,
+        categoryId: categoryId,
       );
       final updated = _parseSingleExpense(body);
       final oldTotal = double.tryParse(previous.total) ?? 0;
@@ -309,7 +322,10 @@ class ExpensesListNotifier extends Notifier<ExpensesListState> {
           ? (state.aggregateTotalCount! - 1).clamp(0, 1 << 30).toInt()
           : null;
       final nextSum = state.aggregateSumTotal != null
-          ? (state.aggregateSumTotal! - removedAmount).clamp(0.0, double.infinity)
+          ? (state.aggregateSumTotal! - removedAmount).clamp(
+              0.0,
+              double.infinity,
+            )
           : null;
 
       state = state.copyWith(
@@ -325,7 +341,10 @@ class ExpensesListNotifier extends Notifier<ExpensesListState> {
     }
   }
 
-  _ParsedPage _parsePage(Map<String, dynamic> body, {required List<Expense> appendTo}) {
+  _ParsedPage _parsePage(
+    Map<String, dynamic> body, {
+    required List<Expense> appendTo,
+  }) {
     final rawList = body['data'];
     final list = rawList is List<dynamic> ? rawList : const <dynamic>[];
     final newItems = list
