@@ -1,6 +1,7 @@
 # Local env (see `.env.example`)
 .env
 .config
+.vscode
 
 # Miscellaneous
 *.class
