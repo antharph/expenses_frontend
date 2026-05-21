@@ -8,6 +8,8 @@ import '../application/budget_providers.dart';
 import '../data/budgets_api.dart';
 import '../domain/budget_log_entry.dart';
 
+const double _kHistoryGutter = 20;
+
 class BudgetHistoryScreen extends ConsumerStatefulWidget {
   const BudgetHistoryScreen({
     super.key,
@@ -34,10 +36,21 @@ class _BudgetHistoryScreenState extends ConsumerState<BudgetHistoryScreen> {
   String _periodLabel(BudgetLogEntry entry) {
     final start = DateFormat.MMMd().format(entry.startDate);
     if (entry.endDate == null) {
-      return '$start - ongoing';
+      return '$start – ongoing';
     }
     final end = DateFormat.MMMd().format(entry.endDate!);
-    return '$start - $end';
+    return '$start – $end';
+  }
+
+  List<BudgetLogEntry> _sortedLogs(List<BudgetLogEntry> logs) {
+    final sorted = List<BudgetLogEntry>.from(logs)
+      ..sort((a, b) => b.startDate.compareTo(a.startDate));
+    return sorted;
+  }
+
+  Future<void> _refreshLogs() async {
+    ref.invalidate(budgetLogsProvider(widget.budgetId));
+    await ref.read(budgetLogsProvider(widget.budgetId).future);
   }
 
   Future<void> _confirmDelete() async {
@@ -46,7 +59,7 @@ class _BudgetHistoryScreenState extends ConsumerState<BudgetHistoryScreen> {
       builder: (context) => AlertDialog(
         title: const Text('Delete budget'),
         content: Text(
-          'Remove "${widget.budgetName}"? Period history will be deleted. This cannot be undone.',
+          'Remove "${_displayLabel(widget.budgetName)}"? Period history will be deleted. This cannot be undone.',
         ),
         actions: [
           TextButton(
@@ -109,8 +122,9 @@ class _BudgetHistoryScreenState extends ConsumerState<BudgetHistoryScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(widget.budgetName),
-        centerTitle: false,
+        title: Text(_displayLabel(widget.budgetName)),
+        scrolledUnderElevation: 0,
+        surfaceTintColor: Colors.transparent,
         actions: [
           PopupMenuButton<String>(
             enabled: !_deleting,
@@ -136,41 +150,71 @@ class _BudgetHistoryScreenState extends ConsumerState<BudgetHistoryScreen> {
           logsAsync.when(
             data: (logs) {
               if (logs.isEmpty) {
-                return Center(
-                  child: Text(
-                    'No budget history yet',
-                    style: theme.textTheme.bodyMedium?.copyWith(
-                      color: scheme.onSurfaceVariant,
-                    ),
-                  ),
-                );
+                return const _BudgetHistoryEmptyState();
               }
 
-              return ListView.builder(
-                padding: const EdgeInsets.symmetric(vertical: 8),
-                itemCount: logs.length,
-                itemBuilder: (context, index) {
-                  final entry = logs[index];
-                  return _BudgetLogListTile(
-                    periodLabel: _periodLabel(entry),
-                    allocated: _currency.format(entry.allocatedAmount),
-                    spent: _currency.format(entry.spentAmount),
-                    rollover: _currency.format(entry.rolloverAmount),
-                  );
-                },
+              final sorted = _sortedLogs(logs);
+              final current = sorted.first;
+              final past = sorted.skip(1).toList();
+
+              return RefreshIndicator(
+                onRefresh: _refreshLogs,
+                child: ListView(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  padding: EdgeInsets.fromLTRB(
+                    _kHistoryGutter,
+                    8,
+                    _kHistoryGutter,
+                    MediaQuery.paddingOf(context).bottom + 24,
+                  ),
+                  children: [
+                    _CurrentPeriodCard(
+                      periodLabel: _periodLabel(current),
+                      entry: current,
+                      formatAmount: _currency.format,
+                    ),
+                    if (past.isNotEmpty) ...[
+                      const SizedBox(height: 28),
+                      _SectionHeader(label: 'Past periods'),
+                      const SizedBox(height: 12),
+                      for (var i = 0; i < past.length; i++) ...[
+                        if (i > 0) const SizedBox(height: 8),
+                        _PastPeriodRow(
+                          periodLabel: _periodLabel(past[i]),
+                          entry: past[i],
+                          formatAmount: _currency.format,
+                        ),
+                      ],
+                    ],
+                  ],
+                ),
               );
             },
-            loading: () => const Center(child: CircularProgressIndicator()),
+            loading: () => const _BudgetHistorySkeleton(),
             error: (error, stackTrace) => Center(
               child: Padding(
-                padding: const EdgeInsets.all(24),
+                padding: const EdgeInsets.all(_kHistoryGutter),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
+                    Icon(
+                      Icons.cloud_off_outlined,
+                      size: 40,
+                      color: scheme.onSurfaceVariant,
+                    ),
+                    const SizedBox(height: 12),
                     Text(
-                      error.toString(),
+                      'Could not load history',
+                      style: theme.textTheme.titleSmall,
                       textAlign: TextAlign.center,
-                      style: theme.textTheme.bodyMedium,
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      formatApiError(error),
+                      textAlign: TextAlign.center,
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: scheme.onSurfaceVariant,
+                      ),
                     ),
                     const SizedBox(height: 16),
                     FilledButton.icon(
@@ -202,62 +246,91 @@ class _BudgetHistoryScreenState extends ConsumerState<BudgetHistoryScreen> {
   }
 }
 
-class _BudgetLogListTile extends StatelessWidget {
-  const _BudgetLogListTile({
+/// Hero card for the active or most recent pay period.
+class _CurrentPeriodCard extends StatelessWidget {
+  const _CurrentPeriodCard({
     required this.periodLabel,
-    required this.allocated,
-    required this.spent,
-    required this.rollover,
+    required this.entry,
+    required this.formatAmount,
   });
 
   final String periodLabel;
-  final String allocated;
-  final String spent;
-  final String rollover;
+  final BudgetLogEntry entry;
+  final String Function(num) formatAmount;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
-    final detailStyle = theme.textTheme.bodyMedium?.copyWith(
-      color: scheme.onSurfaceVariant,
-    );
-    final valueStyle = theme.textTheme.bodyMedium?.copyWith(
-      fontWeight: FontWeight.w600,
-    );
+    final remaining = entry.allocatedAmount - entry.spentAmount;
+    final isOver = remaining < 0;
+    final barColor = isOver ? scheme.error : scheme.primary;
+    final progressFraction = entry.allocatedAmount <= 0
+        ? 0.0
+        : (remaining / entry.allocatedAmount).clamp(0.0, 1.0);
 
-    return ListTile(
-      contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
-      title: Text(
-        periodLabel,
-        style: theme.textTheme.titleSmall?.copyWith(
-          fontWeight: FontWeight.w600,
+    return Material(
+      color: scheme.surface,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(
+          color: scheme.outlineVariant.withValues(alpha: 0.55),
         ),
       ),
-      subtitle: Padding(
-        padding: const EdgeInsets.only(top: 8),
+      child: Padding(
+        padding: const EdgeInsets.all(20),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _MetricLine(
-              label: 'Allocated',
-              value: allocated,
-              labelStyle: detailStyle,
-              valueStyle: valueStyle,
+            Text(
+              'Current period',
+              style: theme.textTheme.labelLarge?.copyWith(
+                color: scheme.onSurfaceVariant,
+                letterSpacing: 0.2,
+              ),
             ),
             const SizedBox(height: 4),
-            _MetricLine(
-              label: 'Spent',
-              value: spent,
-              labelStyle: detailStyle,
-              valueStyle: valueStyle,
+            Text(
+              periodLabel,
+              style: theme.textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.w600,
+              ),
             ),
-            const SizedBox(height: 4),
-            _MetricLine(
-              label: 'Rollover',
-              value: rollover,
-              labelStyle: detailStyle,
-              valueStyle: valueStyle?.copyWith(color: scheme.primary),
+            const SizedBox(height: 20),
+            Text(
+              isOver ? 'Over by' : 'Remaining',
+              style: theme.textTheme.labelLarge?.copyWith(
+                color: scheme.onSurfaceVariant,
+                letterSpacing: 0.2,
+              ),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              formatAmount(isOver ? remaining.abs() : remaining),
+              style: theme.textTheme.displaySmall?.copyWith(
+                fontWeight: FontWeight.w700,
+                height: 1.05,
+                fontFeatures: const [FontFeature.tabularFigures()],
+                color: isOver ? scheme.error : scheme.onSurface,
+              ),
+            ),
+            const SizedBox(height: 16),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(6),
+              child: LinearProgressIndicator(
+                value: progressFraction,
+                minHeight: 8,
+                backgroundColor: scheme.outlineVariant.withValues(alpha: 0.3),
+                color: barColor,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              '${formatAmount(entry.spentAmount)} spent of ${formatAmount(entry.allocatedAmount)}',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: scheme.onSurfaceVariant,
+                fontFeatures: const [FontFeature.tabularFigures()],
+              ),
             ),
           ],
         ),
@@ -266,26 +339,212 @@ class _BudgetLogListTile extends StatelessWidget {
   }
 }
 
-class _MetricLine extends StatelessWidget {
-  const _MetricLine({
-    required this.label,
-    required this.value,
-    this.labelStyle,
-    this.valueStyle,
+/// Compact row for closed periods — one summary line, no repeated metric blocks.
+class _PastPeriodRow extends StatelessWidget {
+  const _PastPeriodRow({
+    required this.periodLabel,
+    required this.entry,
+    required this.formatAmount,
   });
 
-  final String label;
-  final String value;
-  final TextStyle? labelStyle;
-  final TextStyle? valueStyle;
+  final String periodLabel;
+  final BudgetLogEntry entry;
+  final String Function(num) formatAmount;
 
   @override
   Widget build(BuildContext context) {
-    return Row(
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+
+    return Material(
+      color: scheme.surfaceContainerLow.withValues(alpha: 0.45),
+      borderRadius: BorderRadius.circular(12),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        child: Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    periodLabel,
+                    style: theme.textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    '${formatAmount(entry.spentAmount)} spent · ${formatAmount(entry.rolloverAmount)} rolled over',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: scheme.onSurfaceVariant,
+                      fontFeatures: const [FontFeature.tabularFigures()],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Text(
+              formatAmount(entry.allocatedAmount),
+              style: theme.textTheme.titleSmall?.copyWith(
+                fontWeight: FontWeight.w600,
+                fontFeatures: const [FontFeature.tabularFigures()],
+                color: scheme.onSurfaceVariant,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _SectionHeader extends StatelessWidget {
+  const _SectionHeader({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Text(
+      label,
+      style: theme.textTheme.titleSmall?.copyWith(
+        fontWeight: FontWeight.w600,
+        letterSpacing: 0.1,
+      ),
+    );
+  }
+}
+
+class _BudgetHistoryEmptyState extends StatelessWidget {
+  const _BudgetHistoryEmptyState();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(_kHistoryGutter),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.history_outlined,
+              size: 40,
+              color: scheme.onSurfaceVariant.withValues(alpha: 0.7),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              'No period history yet',
+              style: theme.textTheme.titleSmall,
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 6),
+            Text(
+              'Pay period summaries will appear here after spending is tracked.',
+              textAlign: TextAlign.center,
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: scheme.onSurfaceVariant,
+                height: 1.4,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _BudgetHistorySkeleton extends StatelessWidget {
+  const _BudgetHistorySkeleton();
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(_kHistoryGutter, 8, _kHistoryGutter, 24),
+      physics: const NeverScrollableScrollPhysics(),
       children: [
-        Expanded(child: Text(label, style: labelStyle)),
-        Text(value, style: valueStyle),
+        Material(
+          color: scheme.surface,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+            side: BorderSide(
+              color: scheme.outlineVariant.withValues(alpha: 0.55),
+            ),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _Bone(width: 100, height: 14),
+                const SizedBox(height: 8),
+                _Bone(width: 140, height: 18),
+                const SizedBox(height: 20),
+                _Bone(width: 72, height: 12),
+                const SizedBox(height: 6),
+                _Bone(width: 120, height: 36),
+                const SizedBox(height: 16),
+                _Bone(width: double.infinity, height: 8, radius: 6),
+                const SizedBox(height: 8),
+                _Bone(width: 160, height: 12),
+              ],
+            ),
+          ),
+        ),
       ],
     );
   }
+}
+
+class _Bone extends StatelessWidget {
+  const _Bone({
+    required this.width,
+    required this.height,
+    this.radius = 6,
+  });
+
+  final double width;
+  final double height;
+  final double radius;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+
+    return Container(
+      width: width,
+      height: height,
+      decoration: BoxDecoration(
+        color: scheme.onSurface.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(radius),
+      ),
+    );
+  }
+}
+
+String _displayLabel(String raw) {
+  final trimmed = raw.trim();
+  if (trimmed.isEmpty) {
+    return trimmed;
+  }
+  final alpha = trimmed.replaceAll(RegExp(r'[^A-Za-z]'), '');
+  if (alpha.isNotEmpty && alpha == alpha.toUpperCase() && alpha.length > 2) {
+    return trimmed
+        .toLowerCase()
+        .split(RegExp(r'\s+'))
+        .map(
+          (word) => word.isEmpty
+              ? word
+              : '${word[0].toUpperCase()}${word.substring(1)}',
+        )
+        .join(' ');
+  }
+  return trimmed;
 }

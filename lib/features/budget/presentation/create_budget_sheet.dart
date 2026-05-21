@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/errors/api_errors.dart';
 import '../../auth/application/session_notifier.dart';
 import '../../expenses/application/categories_provider.dart';
+import '../../expenses/domain/expense_category.dart';
 import '../application/budget_providers.dart';
 import '../data/budgets_api.dart';
 
@@ -99,6 +100,22 @@ class _CreateBudgetSheetState extends ConsumerState<CreateBudgetSheet> {
     }
   }
 
+  InputDecoration _fieldDecoration(
+    BuildContext context, {
+    required String label,
+    String? hint,
+  }) {
+    final scheme = Theme.of(context).colorScheme;
+
+    return InputDecoration(
+      labelText: label,
+      hintText: hint,
+      filled: true,
+      fillColor: scheme.surface,
+      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final bottomInset = MediaQuery.viewInsetsOf(context).bottom;
@@ -108,29 +125,133 @@ class _CreateBudgetSheetState extends ConsumerState<CreateBudgetSheet> {
     final scheme = theme.colorScheme;
 
     return SingleChildScrollView(
-      padding: EdgeInsets.fromLTRB(24, 8, 24, bottomInset + safeBottom + 24),
+      padding: EdgeInsets.fromLTRB(20, 4, 20, bottomInset + safeBottom + 20),
       child: Form(
         key: _formKey,
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text('Create budget', style: theme.textTheme.titleLarge),
-            const SizedBox(height: 6),
+            Text(
+              'Create budget',
+              style: theme.textTheme.headlineSmall?.copyWith(
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 4),
             Text(
               'Track spending by pay period and carry unused funds forward.',
-              style: theme.textTheme.bodySmall?.copyWith(
+              style: theme.textTheme.bodyMedium?.copyWith(
                 color: scheme.onSurfaceVariant,
               ),
             ),
             const SizedBox(height: 20),
-            TextFormField(
-              controller: _nameController,
+            _BudgetDetailsSection(
+              saving: _saving,
+              nameController: _nameController,
+              amountController: _amountController,
+              resetOption: _resetOption,
+              rollover: _rollover,
+              fieldDecoration: _fieldDecoration,
+              onResetChanged: (value) => setState(() => _resetOption = value),
+              onRolloverChanged: (value) => setState(() => _rollover = value),
+            ),
+            const SizedBox(height: 16),
+            _BudgetCategoryField(
+              categoriesAsync: categoriesAsync,
+              selectedCategoryIds: _selectedCategoryIds,
               enabled: !_saving,
-              decoration: const InputDecoration(
-                labelText: 'Budget name',
-                hintText: 'Home Budget',
-                border: OutlineInputBorder(),
+              onChanged: (categoryId, selected) {
+                setState(() {
+                  if (selected) {
+                    _selectedCategoryIds.add(categoryId);
+                  } else {
+                    _selectedCategoryIds.remove(categoryId);
+                  }
+                  _error = null;
+                });
+              },
+            ),
+            if (_error != null) ...[
+              const SizedBox(height: 16),
+              _FormErrorBanner(message: _error!),
+            ],
+            const SizedBox(height: 24),
+            FilledButton(
+              onPressed: _saving ? null : _save,
+              style: FilledButton.styleFrom(
+                minimumSize: const Size.fromHeight(52),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                ),
+              ),
+              child: _saving
+                  ? const SizedBox(
+                      height: 22,
+                      width: 22,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
+                    )
+                  : Text(
+                      'Create budget',
+                      style: theme.textTheme.titleSmall?.copyWith(
+                        color: scheme.onPrimary,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _BudgetDetailsSection extends StatelessWidget {
+  const _BudgetDetailsSection({
+    required this.saving,
+    required this.nameController,
+    required this.amountController,
+    required this.resetOption,
+    required this.rollover,
+    required this.fieldDecoration,
+    required this.onResetChanged,
+    required this.onRolloverChanged,
+  });
+
+  final bool saving;
+  final TextEditingController nameController;
+  final TextEditingController amountController;
+  final _BudgetResetOption resetOption;
+  final bool rollover;
+  final InputDecoration Function(BuildContext, {required String label, String? hint})
+      fieldDecoration;
+  final ValueChanged<_BudgetResetOption> onResetChanged;
+  final ValueChanged<bool> onRolloverChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+
+    return Material(
+      color: scheme.surfaceContainerLow.withValues(alpha: 0.5),
+      borderRadius: BorderRadius.circular(16),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            TextFormField(
+              controller: nameController,
+              enabled: !saving,
+              textCapitalization: TextCapitalization.sentences,
+              decoration: fieldDecoration(
+                context,
+                label: 'Budget name',
+                hint: 'Home food',
               ),
               textInputAction: TextInputAction.next,
               validator: (value) {
@@ -142,12 +263,12 @@ class _CreateBudgetSheetState extends ConsumerState<CreateBudgetSheet> {
             ),
             const SizedBox(height: 12),
             TextFormField(
-              controller: _amountController,
-              enabled: !_saving,
-              decoration: const InputDecoration(
-                labelText: 'Base amount',
-                hintText: '5000',
-                border: OutlineInputBorder(),
+              controller: amountController,
+              enabled: !saving,
+              decoration: fieldDecoration(
+                context,
+                label: 'Base amount',
+                hint: '5000',
               ),
               keyboardType: const TextInputType.numberWithOptions(
                 decimal: true,
@@ -165,11 +286,8 @@ class _CreateBudgetSheetState extends ConsumerState<CreateBudgetSheet> {
             ),
             const SizedBox(height: 12),
             DropdownButtonFormField<_BudgetResetOption>(
-              initialValue: _resetOption,
-              decoration: const InputDecoration(
-                labelText: 'Reset cadence',
-                border: OutlineInputBorder(),
-              ),
+              initialValue: resetOption,
+              decoration: fieldDecoration(context, label: 'Reset cadence'),
               items: _BudgetResetOption.values
                   .map(
                     (option) => DropdownMenuItem(
@@ -178,93 +296,261 @@ class _CreateBudgetSheetState extends ConsumerState<CreateBudgetSheet> {
                     ),
                   )
                   .toList(),
-              onChanged: _saving
+              onChanged: saving
                   ? null
                   : (value) {
                       if (value == null) {
                         return;
                       }
-                      setState(() => _resetOption = value);
+                      onResetChanged(value);
                     },
             ),
             const SizedBox(height: 4),
-            SwitchListTile(
-              contentPadding: EdgeInsets.zero,
-              title: const Text('Enable rollover'),
-              subtitle: const Text('Unused funds move into the next period.'),
-              value: _rollover,
-              onChanged: _saving
-                  ? null
-                  : (value) => setState(() => _rollover = value),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              'Categories',
-              style: theme.textTheme.labelLarge?.copyWith(
-                color: scheme.onSurfaceVariant,
+            Material(
+              color: scheme.surface,
+              borderRadius: BorderRadius.circular(12),
+              child: SwitchListTile(
+                contentPadding: const EdgeInsets.symmetric(horizontal: 12),
+                title: Text(
+                  'Enable rollover',
+                  style: theme.textTheme.titleSmall,
+                ),
+                subtitle: Text(
+                  'Unused funds move into the next period.',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: scheme.onSurfaceVariant,
+                  ),
+                ),
+                value: rollover,
+                onChanged: saving ? null : onRolloverChanged,
               ),
-            ),
-            const SizedBox(height: 8),
-            categoriesAsync.when(
-              data: (categories) {
-                if (categories.isEmpty) {
-                  return Text(
-                    'No categories available. Add categories before creating a budget.',
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: scheme.onSurfaceVariant,
-                    ),
-                  );
-                }
-
-                return Wrap(
-                  spacing: 8,
-                  runSpacing: 6,
-                  children: [
-                    for (final category in categories)
-                      FilterChip(
-                        label: Text(category.name),
-                        selected: _selectedCategoryIds.contains(category.id),
-                        onSelected: _saving
-                            ? null
-                            : (selected) {
-                                setState(() {
-                                  if (selected) {
-                                    _selectedCategoryIds.add(category.id);
-                                  } else {
-                                    _selectedCategoryIds.remove(category.id);
-                                  }
-                                });
-                              },
-                      ),
-                  ],
-                );
-              },
-              loading: () => const LinearProgressIndicator(),
-              error: (error, stackTrace) => Text(
-                'Could not load categories. Categories are required.',
-                style: theme.textTheme.bodySmall?.copyWith(color: scheme.error),
-              ),
-            ),
-            if (_error != null) ...[
-              const SizedBox(height: 12),
-              Text(
-                _error!,
-                style: theme.textTheme.bodySmall?.copyWith(color: scheme.error),
-              ),
-            ],
-            const SizedBox(height: 20),
-            FilledButton(
-              onPressed: _saving ? null : _save,
-              child: _saving
-                  ? const SizedBox.square(
-                      dimension: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Text('Create budget'),
             ),
           ],
         ),
       ),
     );
   }
+}
+
+class _BudgetCategoryField extends StatelessWidget {
+  const _BudgetCategoryField({
+    required this.categoriesAsync,
+    required this.selectedCategoryIds,
+    required this.enabled,
+    required this.onChanged,
+  });
+
+  final AsyncValue<List<ExpenseCategory>> categoriesAsync;
+  final Set<int> selectedCategoryIds;
+  final bool enabled;
+  final void Function(int categoryId, bool selected) onChanged;
+
+  List<ExpenseCategory> _orderedCategories(List<ExpenseCategory> categories) {
+    final sorted = List<ExpenseCategory>.from(categories)
+      ..sort(
+        (a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()),
+      );
+    return sorted;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Categories',
+          style: theme.textTheme.titleSmall?.copyWith(
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          'Select at least one category to track.',
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: scheme.onSurfaceVariant,
+          ),
+        ),
+        const SizedBox(height: 12),
+        categoriesAsync.when(
+          data: (categories) {
+            if (categories.isEmpty) {
+              return Text(
+                'No categories available. Add categories before creating a budget.',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: scheme.onSurfaceVariant,
+                ),
+              );
+            }
+
+            final ordered = _orderedCategories(categories);
+
+            return Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                for (final category in ordered)
+                  _CategoryChoiceChip(
+                    label: category.name,
+                    selected: selectedCategoryIds.contains(category.id),
+                    accent: _categoryAccent(scheme, category.name),
+                    enabled: enabled,
+                    onTap: () => onChanged(
+                      category.id,
+                      !selectedCategoryIds.contains(category.id),
+                    ),
+                  ),
+              ],
+            );
+          },
+          loading: () => const SizedBox(
+            height: 48,
+            child: Center(
+              child: SizedBox(
+                width: 22,
+                height: 22,
+                child: CircularProgressIndicator(strokeWidth: 2.5),
+              ),
+            ),
+          ),
+          error: (_, _) => Text(
+            'Could not load categories. Categories are required.',
+            style: theme.textTheme.bodySmall?.copyWith(color: scheme.error),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _CategoryChoiceChip extends StatelessWidget {
+  const _CategoryChoiceChip({
+    required this.label,
+    required this.selected,
+    required this.accent,
+    required this.enabled,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool selected;
+  final Color accent;
+  final bool enabled;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+
+    return Material(
+      color: selected
+          ? scheme.primaryContainer.withValues(alpha: 0.55)
+          : scheme.surfaceContainerLow,
+      borderRadius: BorderRadius.circular(20),
+      child: InkWell(
+        onTap: enabled ? onTap : null,
+        borderRadius: BorderRadius.circular(20),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: 48),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 8,
+                  height: 8,
+                  decoration: BoxDecoration(
+                    color: selected ? scheme.primary : accent,
+                    shape: BoxShape.circle,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  _displayLabel(label),
+                  style: theme.textTheme.labelLarge?.copyWith(
+                    color: selected
+                        ? scheme.onPrimaryContainer
+                        : scheme.onSurfaceVariant,
+                    fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _FormErrorBanner extends StatelessWidget {
+  const _FormErrorBanner({required this.message});
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+
+    return Material(
+      color: scheme.errorContainer.withValues(alpha: 0.45),
+      borderRadius: BorderRadius.circular(12),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(Icons.error_outline, size: 20, color: scheme.error),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                message,
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: scheme.onErrorContainer,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+String _displayLabel(String raw) {
+  final trimmed = raw.trim();
+  if (trimmed.isEmpty) {
+    return trimmed;
+  }
+  final alpha = trimmed.replaceAll(RegExp(r'[^A-Za-z]'), '');
+  if (alpha.isNotEmpty && alpha == alpha.toUpperCase() && alpha.length > 2) {
+    return trimmed
+        .toLowerCase()
+        .split(RegExp(r'\s+'))
+        .map(
+          (word) => word.isEmpty
+              ? word
+              : '${word[0].toUpperCase()}${word.substring(1)}',
+        )
+        .join(' ');
+  }
+  return trimmed;
+}
+
+Color _categoryAccent(ColorScheme scheme, String label) {
+  final palette = [
+    scheme.primary,
+    scheme.secondary,
+    scheme.tertiary,
+    scheme.primaryContainer,
+    scheme.secondaryContainer,
+    scheme.tertiaryContainer,
+  ];
+  return palette[label.hashCode.abs() % palette.length];
 }

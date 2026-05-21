@@ -79,7 +79,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     return switch (index) {
       0 => Scaffold(
         appBar: AppBar(
-          title: const Text('Dashboard'),
+          scrolledUnderElevation: 0,
+          surfaceTintColor: Colors.transparent,
           actions: const [SignOutMenuButton()],
         ),
         body: const _DashboardHome(),
@@ -244,9 +245,73 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
 }
 
 /// Shared horizontal inset so section headers and chart copy line up visually.
-const double _kDashboardContentGutter = 24;
+const double _kDashboardContentGutter = 20;
 
-const double _kDashboardSectionGap = 40;
+const double _kDashboardSectionGap = 32;
+
+/// Neutral chart container — elevation via border, not tinted cards.
+class _DashboardChartSurface extends StatelessWidget {
+  const _DashboardChartSurface({required this.child, this.padding});
+
+  final Widget child;
+  final EdgeInsetsGeometry? padding;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+
+    return Material(
+      color: scheme.surface,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(
+          color: scheme.outlineVariant.withValues(alpha: 0.5),
+        ),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Padding(
+        padding:
+            padding ?? const EdgeInsets.fromLTRB(4, 12, 12, 4),
+        child: child,
+      ),
+    );
+  }
+}
+
+class _DashboardSectionHeader extends StatelessWidget {
+  const _DashboardSectionHeader({required this.title, this.subtitle});
+
+  final String title;
+  final String? subtitle;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          title,
+          style: theme.textTheme.titleMedium?.copyWith(
+            fontWeight: FontWeight.w600,
+            color: scheme.onSurface,
+          ),
+        ),
+        if (subtitle != null) ...[
+          const SizedBox(height: 4),
+          Text(
+            subtitle!,
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: scheme.onSurfaceVariant,
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+}
 
 class _DashboardHome extends ConsumerStatefulWidget {
   const _DashboardHome();
@@ -270,6 +335,8 @@ class _DashboardHomeState extends ConsumerState<_DashboardHome> {
     super.dispose();
   }
 
+  static const Duration _weekPageAnimationDuration = Duration(milliseconds: 280);
+
   void _onWeekPageChanged(int index) {
     if (index == 1) {
       return;
@@ -287,35 +354,61 @@ class _DashboardHomeState extends ConsumerState<_DashboardHome> {
     });
   }
 
+  Future<void> _animateToAdjacentWeek({required bool previous}) async {
+    if (!_weekPageController.hasClients) {
+      return;
+    }
+    final targetPage = previous ? 0 : 2;
+    await _weekPageController.animateToPage(
+      targetPage,
+      duration: _weekPageAnimationDuration,
+      curve: Curves.easeInOutCubic,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    const topPad = 12.0;
+    final bottomPad =
+        _kDashboardContentGutter + MediaQuery.paddingOf(context).bottom + 16;
     final selected = ref.watch(dashboardSelectedWeekProvider);
     final previous = ExpenseWeek.previous(selected.year, selected.week);
     final next = ExpenseWeek.next(selected.year, selected.week);
 
     return Padding(
-      padding: const EdgeInsets.fromLTRB(
+      padding: EdgeInsets.fromLTRB(
         _kDashboardContentGutter,
-        topPad,
+        8,
         _kDashboardContentGutter,
-        _kDashboardContentGutter,
+        bottomPad,
       ),
-      child: PageView(
-        controller: _weekPageController,
-        onPageChanged: _onWeekPageChanged,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _WeekDashboardPage(
-            key: ValueKey('week-${previous.year}-${previous.week}'),
-            weekKey: previous,
-          ),
-          _WeekDashboardPage(
-            key: ValueKey('week-${selected.year}-${selected.week}'),
+          _WeekPagerBar(
             weekKey: selected,
+            onPreviousWeek: () => _animateToAdjacentWeek(previous: true),
+            onNextWeek: () => _animateToAdjacentWeek(previous: false),
           ),
-          _WeekDashboardPage(
-            key: ValueKey('week-${next.year}-${next.week}'),
-            weekKey: next,
+          const SizedBox(height: 16),
+          Expanded(
+            child: PageView(
+              controller: _weekPageController,
+              onPageChanged: _onWeekPageChanged,
+              children: [
+                _WeekDashboardPage(
+                  key: ValueKey('week-${previous.year}-${previous.week}'),
+                  weekKey: previous,
+                ),
+                _WeekDashboardPage(
+                  key: ValueKey('week-${selected.year}-${selected.week}'),
+                  weekKey: selected,
+                ),
+                _WeekDashboardPage(
+                  key: ValueKey('week-${next.year}-${next.week}'),
+                  weekKey: next,
+                ),
+              ],
+            ),
           ),
         ],
       ),
@@ -421,7 +514,7 @@ class _DashboardSpendingAnalytics extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _WeekTotalHeader(
+        _WeekHeroMetric(
           total: display.weekTotal,
           categoryLabel: selectedCategory,
         ),
@@ -434,7 +527,7 @@ class _DashboardSpendingAnalytics extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const SizedBox(height: 8),
+                    const SizedBox(height: 12),
                     _CategoryFilterBanner(
                       categoryLabel: selectedCategory!,
                       onClear: onClearCategoryFilter,
@@ -444,15 +537,14 @@ class _DashboardSpendingAnalytics extends StatelessWidget {
               : const SizedBox.shrink(),
         ),
         const SizedBox(height: _kDashboardSectionGap),
-        _WeekRangeSubtitle(
-          startDate: summary.startDate,
-          endDate: summary.endDate,
-        ),
+        const _DashboardSectionHeader(title: 'Daily spending'),
         const SizedBox(height: 12),
-        SizedBox(
-          width: double.infinity,
-          height: 248,
-          child: _DailyExpenseBarChart(summary: display),
+        _DashboardChartSurface(
+          child: SizedBox(
+            width: double.infinity,
+            height: 232,
+            child: _DailyExpenseBarChart(summary: display),
+          ),
         ),
       ],
     );
@@ -472,38 +564,149 @@ class _DashboardCategoryBreakdown extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          'By category',
-          style: theme.textTheme.titleSmall?.copyWith(
-            color: theme.colorScheme.onSurfaceVariant,
-            fontWeight: FontWeight.w500,
-          ),
-        ),
-        const SizedBox(height: 4),
-        Text(
-          'Tap a slice to filter the chart above',
-          style: theme.textTheme.bodySmall?.copyWith(
-            color: theme.colorScheme.onSurfaceVariant,
-          ),
+        const _DashboardSectionHeader(
+          title: 'Categories',
+          subtitle: 'Tap a slice to filter daily spending',
         ),
         const SizedBox(height: 12),
-        _CategoryExpensePieChart(
-          summary: summary,
-          selectedCategory: selectedCategory,
-          onCategorySelected: onCategorySelected,
+        _DashboardChartSurface(
+          padding: const EdgeInsets.fromLTRB(12, 16, 12, 12),
+          child: _CategoryExpensePieChart(
+            summary: summary,
+            selectedCategory: selectedCategory,
+            onCategorySelected: onCategorySelected,
+          ),
         ),
       ],
     );
   }
 }
 
-class _WeekTotalHeader extends StatelessWidget {
-  const _WeekTotalHeader({required this.total, this.categoryLabel});
+class _WeekPagerBar extends StatelessWidget {
+  const _WeekPagerBar({
+    required this.weekKey,
+    required this.onPreviousWeek,
+    required this.onNextWeek,
+  });
+
+  final ExpenseWeekKey weekKey;
+  final VoidCallback onPreviousWeek;
+  final VoidCallback onNextWeek;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final start = ExpenseWeek.weekStart(weekKey.year, weekKey.week);
+    final end = ExpenseWeek.weekEnd(weekKey.year, weekKey.week);
+    final range =
+        '${DateFormat.MMMd().format(start)} – ${DateFormat.MMMd().format(end)}';
+    final isCurrentWeek = ExpenseWeek.isCurrentCalendarWeek(
+      weekKey.year,
+      weekKey.week,
+    );
+
+    Widget navButton({
+      required IconData icon,
+      required String tooltip,
+      required VoidCallback onPressed,
+    }) {
+      return IconButton(
+        onPressed: onPressed,
+        tooltip: tooltip,
+        style: IconButton.styleFrom(
+          foregroundColor: scheme.onSurfaceVariant,
+          minimumSize: const Size(48, 48),
+          tapTargetSize: MaterialTapTargetSize.padded,
+        ),
+        icon: Icon(icon, size: 22),
+      );
+    }
+
+    return Semantics(
+      label:
+          'Week of $range. Swipe horizontally or use arrows to change weeks.',
+      child: Row(
+        children: [
+          navButton(
+            icon: Icons.chevron_left_rounded,
+            tooltip: 'Previous week',
+            onPressed: onPreviousWeek,
+          ),
+          Expanded(
+            child: Material(
+              color: scheme.surfaceContainerLow,
+              borderRadius: BorderRadius.circular(12),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 10,
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (isCurrentWeek) ...[
+                      Text(
+                        'This week',
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          color: scheme.primary,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                    ],
+                    Text(
+                      range,
+                      textAlign: TextAlign.center,
+                      style: theme.textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.w600,
+                        fontFeatures: const [FontFeature.tabularFigures()],
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.swipe_rounded,
+                          size: 14,
+                          color: scheme.onSurfaceVariant.withValues(
+                            alpha: 0.7,
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          'Swipe for other weeks',
+                          style: theme.textTheme.labelSmall?.copyWith(
+                            color: scheme.onSurfaceVariant.withValues(
+                              alpha: 0.85,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          navButton(
+            icon: Icons.chevron_right_rounded,
+            tooltip: 'Next week',
+            onPressed: onNextWeek,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _WeekHeroMetric extends StatelessWidget {
+  const _WeekHeroMetric({required this.total, this.categoryLabel});
 
   final double total;
   final String? categoryLabel;
@@ -511,6 +714,7 @@ class _WeekTotalHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
     final currency = NumberFormat.currency(symbol: r'', decimalDigits: 0);
     final filtered = categoryLabel != null;
 
@@ -518,22 +722,23 @@ class _WeekTotalHeader extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          filtered ? 'Total · $categoryLabel' : 'Total',
-          style: theme.textTheme.bodySmall?.copyWith(
-            color: theme.colorScheme.onSurfaceVariant,
-            fontWeight: FontWeight.w400,
-            letterSpacing: 0.2,
+          filtered
+              ? 'Week total · ${_displayLabel(categoryLabel!)}'
+              : 'Week total',
+          style: theme.textTheme.labelLarge?.copyWith(
+            color: scheme.onSurfaceVariant,
+            letterSpacing: 0.15,
           ),
         ),
-        const SizedBox(height: 6),
+        const SizedBox(height: 8),
         Text(
           currency.format(total),
-          style: theme.textTheme.headlineLarge?.copyWith(
+          style: theme.textTheme.displaySmall?.copyWith(
             fontWeight: FontWeight.w700,
+            height: 1.05,
             letterSpacing: -0.5,
-            color: filtered
-                ? theme.colorScheme.primary
-                : theme.colorScheme.onSurface,
+            fontFeatures: const [FontFeature.tabularFigures()],
+            color: filtered ? scheme.primary : scheme.onSurface,
           ),
         ),
       ],
@@ -566,7 +771,7 @@ class _CategoryFilterBanner extends StatelessWidget {
               child: Padding(
                 padding: const EdgeInsets.only(left: 12),
                 child: Text(
-                  'Showing $categoryLabel only',
+                  'Showing ${_displayLabel(categoryLabel)} only',
                   style: theme.textTheme.labelLarge?.copyWith(
                     color: scheme.onPrimaryContainer,
                   ),
@@ -584,40 +789,6 @@ class _CategoryFilterBanner extends StatelessWidget {
           ],
         ),
       ),
-    );
-  }
-}
-
-class _WeekRangeSubtitle extends StatelessWidget {
-  const _WeekRangeSubtitle({required this.startDate, required this.endDate});
-
-  final DateTime startDate;
-  final DateTime endDate;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final range =
-        '${DateFormat.MMMd().format(startDate)} – '
-        '${DateFormat.MMMd().format(endDate)}';
-
-    return Row(
-      children: [
-        Expanded(
-          child: Text(
-            range,
-            style: theme.textTheme.titleSmall?.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-        ),
-        Icon(
-          Icons.swipe_rounded,
-          size: 18,
-          color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.65),
-        ),
-      ],
     );
   }
 }
@@ -711,6 +882,7 @@ class _DailyExpenseBarChart extends StatelessWidget {
                 }
                 final labelStyle = theme.textTheme.labelSmall?.copyWith(
                   color: theme.colorScheme.onSurfaceVariant,
+                  fontFeatures: const [FontFeature.tabularFigures()],
                 );
 
                 return SideTitleWidget(
@@ -791,7 +963,7 @@ class _DailyExpenseBarChart extends StatelessWidget {
             return (n - n.round()).abs() < 0.02;
           },
           getDrawingHorizontalLine: (value) => FlLine(
-            color: theme.colorScheme.outlineVariant.withValues(alpha: 0.32),
+            color: theme.colorScheme.outlineVariant.withValues(alpha: 0.22),
             strokeWidth: 1,
           ),
         ),
@@ -816,9 +988,9 @@ class _DailyExpenseBarChart extends StatelessWidget {
             barRods: [
               BarChartRodData(
                 toY: rodY,
-                width: 18,
+                width: 20,
                 borderRadius: const BorderRadius.vertical(
-                  top: Radius.circular(4),
+                  top: Radius.circular(6),
                 ),
                 color: rodColor,
               ),
@@ -898,6 +1070,10 @@ class _CategoryExpensePieChart extends StatelessWidget {
     final currency = NumberFormat.currency(symbol: r'', decimalDigits: 0);
     final scheme = theme.colorScheme;
 
+    final centerLabel = selectedCategory != null
+        ? _displayLabel(selectedCategory!)
+        : 'All categories';
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -905,38 +1081,69 @@ class _CategoryExpensePieChart extends StatelessWidget {
           label: 'Expense breakdown by category. Tap a slice to filter.',
           child: SizedBox(
             width: double.infinity,
-            height: 220,
-            child: PieChart(
-              PieChartData(
-                sectionsSpace: 2,
-                centerSpaceRadius: 44,
-                pieTouchData: PieTouchData(
-                  enabled: true,
-                  touchCallback: (event, response) =>
-                      _onPieTouch(event, response, totals),
-                ),
-                sections: [
-                  for (var i = 0; i < totals.length; i++)
-                    _pieSection(
-                      theme: theme,
-                      scheme: scheme,
-                      entry: totals[i],
-                      color: colors[i],
-                      grandTotal: grandTotal,
-                      selected: totals[i].label == selectedCategory,
-                      dimmed:
-                          selectedCategory != null &&
-                          totals[i].label != selectedCategory,
+            height: 200,
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                PieChart(
+                  PieChartData(
+                    sectionsSpace: 2,
+                    centerSpaceRadius: 52,
+                    pieTouchData: PieTouchData(
+                      enabled: true,
+                      touchCallback: (event, response) =>
+                          _onPieTouch(event, response, totals),
                     ),
-                ],
-              ),
+                    sections: [
+                      for (var i = 0; i < totals.length; i++)
+                        _pieSection(
+                          theme: theme,
+                          scheme: scheme,
+                          entry: totals[i],
+                          color: colors[i],
+                          grandTotal: grandTotal,
+                          selected: totals[i].label == selectedCategory,
+                          dimmed:
+                              selectedCategory != null &&
+                              totals[i].label != selectedCategory,
+                        ),
+                    ],
+                  ),
+                ),
+                IgnorePointer(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        centerLabel,
+                        textAlign: TextAlign.center,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          color: scheme.onSurfaceVariant,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        currency.format(grandTotal),
+                        style: theme.textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w700,
+                          fontFeatures: const [
+                            FontFeature.tabularFigures(),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ),
           ),
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 12),
         Wrap(
           spacing: 8,
-          runSpacing: 4,
+          runSpacing: 8,
           children: [
             for (var i = 0; i < totals.length; i++)
               _CategoryLegendChip(
@@ -1005,31 +1212,46 @@ class _CategoryLegendChip extends StatelessWidget {
 
     return Material(
       color: selected
-          ? scheme.primaryContainer.withValues(alpha: 0.55)
-          : Colors.transparent,
-      borderRadius: BorderRadius.circular(20),
+          ? scheme.primaryContainer.withValues(alpha: 0.45)
+          : scheme.surfaceContainerLow,
+      borderRadius: BorderRadius.circular(12),
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(12),
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
               Container(
-                width: 12,
-                height: 12,
+                width: 8,
+                height: 8,
                 decoration: BoxDecoration(color: color, shape: BoxShape.circle),
               ),
-              const SizedBox(width: 8),
-              Text(
-                '$label · $amount',
-                style: theme.textTheme.labelMedium?.copyWith(
-                  color: selected
-                      ? scheme.onPrimaryContainer
-                      : scheme.onSurfaceVariant,
-                  fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
-                ),
+              const SizedBox(width: 10),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    _displayLabel(label),
+                    style: theme.textTheme.labelMedium?.copyWith(
+                      color: selected
+                          ? scheme.onPrimaryContainer
+                          : scheme.onSurface,
+                      fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
+                    ),
+                  ),
+                  Text(
+                    amount,
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: selected
+                          ? scheme.onPrimaryContainer.withValues(alpha: 0.85)
+                          : scheme.onSurfaceVariant,
+                      fontFeatures: const [FontFeature.tabularFigures()],
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
@@ -1037,4 +1259,24 @@ class _CategoryLegendChip extends StatelessWidget {
       ),
     );
   }
+}
+
+String _displayLabel(String raw) {
+  final trimmed = raw.trim();
+  if (trimmed.isEmpty) {
+    return trimmed;
+  }
+  final alpha = trimmed.replaceAll(RegExp(r'[^A-Za-z]'), '');
+  if (alpha.isNotEmpty && alpha == alpha.toUpperCase() && alpha.length > 2) {
+    return trimmed
+        .toLowerCase()
+        .split(RegExp(r'\s+'))
+        .map(
+          (word) => word.isEmpty
+              ? word
+              : '${word[0].toUpperCase()}${word.substring(1)}',
+        )
+        .join(' ');
+  }
+  return trimmed;
 }
