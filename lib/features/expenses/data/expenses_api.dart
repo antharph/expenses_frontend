@@ -39,6 +39,7 @@ class ExpensesApi {
     int page = 1,
     String? from,
     String? to,
+    int? categoryId,
   }) async {
     final client = _jsonClient(token);
     final queryParameters = <String, dynamic>{'page': page};
@@ -47,6 +48,9 @@ class ExpensesApi {
     }
     if (to != null) {
       queryParameters['to'] = to;
+    }
+    if (categoryId != null) {
+      queryParameters['category_id'] = categoryId;
     }
     final response = await client.get<Map<String, dynamic>>(
       '/api/v1/expenses',

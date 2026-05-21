@@ -17,6 +17,7 @@ class ExpensesListState {
     this.loadedPage = 0,
     this.dateRangeStart,
     this.dateRangeEnd,
+    this.categoryId,
     this.aggregateTotalCount,
     this.aggregateSumTotal,
   });
@@ -29,6 +30,7 @@ class ExpensesListState {
   final int loadedPage;
   final DateTime? dateRangeStart;
   final DateTime? dateRangeEnd;
+  final int? categoryId;
 
   /// Total matching expenses across all pages (`meta.total` from the API).
   final int? aggregateTotalCount;
@@ -37,6 +39,8 @@ class ExpensesListState {
   final double? aggregateSumTotal;
 
   bool get hasDateFilter => dateRangeStart != null && dateRangeEnd != null;
+
+  bool get hasCategoryFilter => categoryId != null;
 
   bool get hasAggregateSummary =>
       aggregateTotalCount != null && aggregateSumTotal != null;
@@ -67,6 +71,8 @@ class ExpensesListState {
     DateTime? dateRangeStart,
     DateTime? dateRangeEnd,
     bool clearDateRange = false,
+    int? categoryId,
+    bool clearCategoryFilter = false,
     int? aggregateTotalCount,
     double? aggregateSumTotal,
     bool clearAggregates = false,
@@ -84,6 +90,7 @@ class ExpensesListState {
           ? null
           : (dateRangeStart ?? this.dateRangeStart),
       dateRangeEnd: clearDateRange ? null : (dateRangeEnd ?? this.dateRangeEnd),
+      categoryId: clearCategoryFilter ? null : (categoryId ?? this.categoryId),
       aggregateTotalCount: clearAggregates
           ? null
           : (aggregateTotalCount ?? this.aggregateTotalCount),
@@ -134,6 +141,21 @@ class ExpensesListNotifier extends Notifier<ExpensesListState> {
     setDateRange(clear: true);
   }
 
+  void setCategoryFilter(int? categoryId) {
+    if (categoryId == state.categoryId) {
+      return;
+    }
+    state = state.copyWith(
+      categoryId: categoryId,
+      clearCategoryFilter: categoryId == null,
+    );
+    loadInitial();
+  }
+
+  void clearCategoryFilter() {
+    setCategoryFilter(null);
+  }
+
   DateTime _dateOnly(DateTime value) =>
       DateTime(value.year, value.month, value.day);
 
@@ -172,6 +194,7 @@ class ExpensesListNotifier extends Notifier<ExpensesListState> {
         page: 1,
         from: _apiDateTime(state.dateRangeStart, endOfDay: false),
         to: _apiDateTime(state.dateRangeEnd, endOfDay: true),
+        categoryId: state.categoryId,
       );
       final parsed = _parsePage(body, appendTo: const []);
       state = state.copyWith(
@@ -222,6 +245,7 @@ class ExpensesListNotifier extends Notifier<ExpensesListState> {
         page: nextPage,
         from: _apiDateTime(state.dateRangeStart, endOfDay: false),
         to: _apiDateTime(state.dateRangeEnd, endOfDay: true),
+        categoryId: state.categoryId,
       );
       final parsed = _parsePage(body, appendTo: state.items);
       state = state.copyWith(

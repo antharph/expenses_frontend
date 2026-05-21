@@ -5,8 +5,10 @@ import 'package:intl/intl.dart';
 
 import '../../dashboard/application/dashboard_expense_summary_provider.dart';
 import '../../dashboard/presentation/sign_out_menu_button.dart';
+import '../application/categories_provider.dart';
 import '../application/expenses_list_notifier.dart';
 import '../domain/expense.dart';
+import '../domain/expense_category.dart';
 import 'add_expense_sheet.dart';
 import 'expense_detail_sheet.dart';
 
@@ -91,13 +93,20 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen> {
   @override
   Widget build(BuildContext context) {
     final list = ref.watch(expensesListProvider);
+    final categoriesAsync = ref.watch(expenseCategoriesProvider);
     final filtered = list.filteredItems;
     final itemCount = filtered.length + (list.isLoadingMore ? 1 : 0);
+    final selectedCategoryName = _categoryName(
+      categoriesAsync.valueOrNull,
+      list.categoryId,
+    );
     final showSummaryBar =
         list.isLoadingInitial ||
         filtered.isNotEmpty ||
         (list.hasAggregateSummary &&
-            (list.hasDateFilter || (list.aggregateTotalCount ?? 0) > 0));
+            (list.hasDateFilter ||
+                list.hasCategoryFilter ||
+                (list.aggregateTotalCount ?? 0) > 0));
 
     ref.listen<ExpensesListState>(expensesListProvider, (previous, next) {
       final msg = next.initialError;
@@ -145,11 +154,19 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen> {
                 ? () => ref.read(expensesListProvider.notifier).clearDateRange()
                 : null,
           ),
+          _CategoryFilterBar(
+            categoriesAsync: categoriesAsync,
+            selectedCategoryId: list.categoryId,
+            onCategorySelected: (categoryId) => ref
+                .read(expensesListProvider.notifier)
+                .setCategoryFilter(categoryId),
+          ),
           if (showSummaryBar)
             _ExpensesSummaryBar(
               hasDateFilter: list.hasDateFilter,
               rangeStart: list.dateRangeStart,
               rangeEnd: list.dateRangeEnd,
+              categoryLabel: selectedCategoryName,
               isLoading: list.isLoadingInitial && !list.hasAggregateSummary,
               totalCount: list.aggregateTotalCount,
               sumTotal: list.aggregateSumTotal,
@@ -182,8 +199,8 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen> {
                     child: Padding(
                       padding: const EdgeInsets.all(24),
                       child: Text(
-                        list.hasDateFilter
-                            ? 'No expenses in this date range.'
+                        list.hasDateFilter || list.hasCategoryFilter
+                            ? 'No expenses match your filters.'
                             : 'No expenses yet.',
                         textAlign: TextAlign.center,
                         style: Theme.of(context).textTheme.bodyLarge,
@@ -220,6 +237,102 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen> {
           ),
         ],
       ),
+    );
+  }
+
+  String? _categoryName(List<ExpenseCategory>? categories, int? categoryId) {
+    if (categoryId == null || categories == null) {
+      return null;
+    }
+    for (final category in categories) {
+      if (category.id == categoryId) {
+        return category.name;
+      }
+    }
+    return null;
+  }
+}
+
+class _CategoryFilterBar extends StatelessWidget {
+  const _CategoryFilterBar({
+    required this.categoriesAsync,
+    required this.selectedCategoryId,
+    required this.onCategorySelected,
+  });
+
+  final AsyncValue<List<ExpenseCategory>> categoriesAsync;
+  final int? selectedCategoryId;
+  final ValueChanged<int?> onCategorySelected;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+
+    return categoriesAsync.when(
+      data: (categories) {
+        if (categories.isEmpty) {
+          return const SizedBox.shrink();
+        }
+
+        final sorted = List<ExpenseCategory>.from(categories)
+          ..sort(
+            (a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()),
+          );
+
+        return Material(
+          color: scheme.surfaceContainerLow,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  'Category',
+                  style: theme.textTheme.labelLarge?.copyWith(
+                    color: scheme.onSurfaceVariant,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    children: [
+                      FilterChip(
+                        label: const Text('All'),
+                        selected: selectedCategoryId == null,
+                        onSelected: selectedCategoryId == null
+                            ? null
+                            : (_) => onCategorySelected(null),
+                      ),
+                      for (final category in sorted) ...[
+                        const SizedBox(width: 8),
+                        FilterChip(
+                          label: Text(category.name),
+                          selected: selectedCategoryId == category.id,
+                          onSelected: (_) => onCategorySelected(category.id),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+      loading: () => Material(
+        color: scheme.surfaceContainerLow,
+        child: const Padding(
+          padding: EdgeInsets.fromLTRB(16, 0, 16, 12),
+          child: SizedBox(
+            height: 4,
+            child: LinearProgressIndicator(),
+          ),
+        ),
+      ),
+      error: (_, _) => const SizedBox.shrink(),
     );
   }
 }
@@ -349,6 +462,7 @@ class _ExpensesSummaryBar extends StatelessWidget {
     required this.hasDateFilter,
     required this.rangeStart,
     required this.rangeEnd,
+    this.categoryLabel,
     required this.isLoading,
     required this.totalCount,
     required this.sumTotal,
@@ -358,6 +472,7 @@ class _ExpensesSummaryBar extends StatelessWidget {
   final bool hasDateFilter;
   final DateTime? rangeStart;
   final DateTime? rangeEnd;
+  final String? categoryLabel;
   final bool isLoading;
   final int? totalCount;
   final double? sumTotal;
@@ -370,10 +485,18 @@ class _ExpensesSummaryBar extends StatelessWidget {
   );
 
   String _scopeLabel() {
+    final parts = <String>[];
     if (hasDateFilter && rangeStart != null && rangeEnd != null) {
-      return '${_rangeFormat.format(rangeStart!)} – ${_rangeFormat.format(rangeEnd!)}';
+      parts.add(
+        '${_rangeFormat.format(rangeStart!)} – ${_rangeFormat.format(rangeEnd!)}',
+      );
+    } else if (categoryLabel == null) {
+      parts.add('All expenses');
     }
-    return 'All expenses';
+    if (categoryLabel != null) {
+      parts.add(categoryLabel!);
+    }
+    return parts.join(' · ');
   }
 
   String _countLabel(int count) {
