@@ -4,6 +4,8 @@ class ExpenseCategory {
     required this.name,
   });
 
+  static const defaultName = 'Miscellaneous';
+
   final int id;
   final String name;
 
@@ -16,4 +18,14 @@ class ExpenseCategory {
       name: json['name'] as String? ?? '',
     );
   }
+}
+
+/// Resolves the default category id (Miscellaneous) from an API list.
+int? defaultExpenseCategoryId(List<ExpenseCategory> categories) {
+  for (final category in categories) {
+    if (category.name.toLowerCase() == ExpenseCategory.defaultName.toLowerCase()) {
+      return category.id;
+    }
+  }
+  return null;
 }
