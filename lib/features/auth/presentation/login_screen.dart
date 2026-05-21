@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../application/auth_page.dart';
 import '../application/session_notifier.dart';
+import 'widgets/auth_form_widgets.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
@@ -78,106 +79,101 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+
     return Scaffold(
-      body: SafeArea(
-        child: Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 420),
-            child: ListView(
-              padding: const EdgeInsets.all(24),
-              children: [
-                Text(
-                  'Sign in',
-                  style: Theme.of(context).textTheme.headlineMedium,
-                ),
-                if (_authError != null) ...[
+      body: AuthScaffold(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const AuthHeader(
+              title: 'Sign in',
+              subtitle: 'Welcome back. Sign in to continue tracking your expenses.',
+            ),
+            if (_authError != null) ...[
+              const SizedBox(height: 20),
+              AuthErrorBanner(message: _authError!),
+            ],
+            const SizedBox(height: 28),
+            Form(
+              key: _formKey,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  TextFormField(
+                    controller: _email,
+                    keyboardType: TextInputType.emailAddress,
+                    textInputAction: TextInputAction.next,
+                    autofillHints: const [AutofillHints.email],
+                    decoration: authFieldDecoration(
+                      context,
+                      label: 'Email',
+                      prefixIcon: Icon(
+                        Icons.mail_outline_rounded,
+                        color: scheme.onSurfaceVariant,
+                      ),
+                    ),
+                    validator: (value) {
+                      final v = value?.trim() ?? '';
+                      if (v.isEmpty) {
+                        return 'Enter your email';
+                      }
+                      if (!v.contains('@')) {
+                        return 'Enter a valid email';
+                      }
+                      return null;
+                    },
+                  ),
                   const SizedBox(height: 12),
-                  Text(
-                    _authError!,
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: Theme.of(context).colorScheme.error,
-                        ),
+                  AuthPasswordField(
+                    controller: _password,
+                    label: 'Password',
+                    autofillHints: const [AutofillHints.password],
+                    validator: (value) {
+                      if (value == null || value.isEmpty) {
+                        return 'Enter your password';
+                      }
+                      return null;
+                    },
+                  ),
+                  const SizedBox(height: 24),
+                  FilledButton(
+                    onPressed: _busy ? null : _submitEmailPassword,
+                    style: FilledButton.styleFrom(
+                      minimumSize: const Size.fromHeight(48),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    child: _submittingEmail
+                        ? const SizedBox(
+                            width: 22,
+                            height: 22,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Text('Sign in'),
+                  ),
+                  const SizedBox(height: 20),
+                  const AuthOrDivider(),
+                  const SizedBox(height: 20),
+                  GoogleSignInButton(
+                    onPressed: _busy ? null : _submitGoogle,
+                    loading: _submittingGoogle,
                   ),
                 ],
-                const SizedBox(height: 24),
-                Form(
-                  key: _formKey,
-                  child: Column(
-                    children: [
-                      TextFormField(
-                        controller: _email,
-                        keyboardType: TextInputType.emailAddress,
-                        autofillHints: const [AutofillHints.email],
-                        decoration: const InputDecoration(
-                          labelText: 'Email',
-                          border: OutlineInputBorder(),
-                        ),
-                        validator: (value) {
-                          final v = value?.trim() ?? '';
-                          if (v.isEmpty) {
-                            return 'Enter your email';
-                          }
-                          if (!v.contains('@')) {
-                            return 'Enter a valid email';
-                          }
-                          return null;
-                        },
-                      ),
-                      const SizedBox(height: 16),
-                      TextFormField(
-                        controller: _password,
-                        obscureText: true,
-                        autofillHints: const [AutofillHints.password],
-                        decoration: const InputDecoration(
-                          labelText: 'Password',
-                          border: OutlineInputBorder(),
-                        ),
-                        validator: (value) {
-                          if (value == null || value.isEmpty) {
-                            return 'Enter your password';
-                          }
-                          return null;
-                        },
-                      ),
-                      const SizedBox(height: 16),
-                      FilledButton(
-                        onPressed: _busy ? null : _submitEmailPassword,
-                        style: FilledButton.styleFrom(
-                          minimumSize: const Size.fromHeight(48),
-                        ),
-                        child: _submittingEmail
-                            ? const SizedBox(
-                                width: 22,
-                                height: 22,
-                                child: CircularProgressIndicator(strokeWidth: 2),
-                              )
-                            : const Text('Sign in'),
-                      ),
-                      const SizedBox(height: 16),
-                      OutlinedButton.icon(
-                        onPressed: _busy ? null : _submitGoogle,
-                        icon: const Icon(Icons.g_mobiledata_rounded, size: 28),
-                        label: const Text('Continue with Google'),
-                        style: OutlinedButton.styleFrom(
-                          minimumSize: const Size.fromHeight(48),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 8),
-                TextButton(
-                  onPressed: _busy
-                      ? null
-                      : () {
-                          ref.read(authPageProvider.notifier).state =
-                              AuthPage.register;
-                        },
-                  child: const Text('Create an account'),
-                ),
-              ],
+              ),
             ),
-          ),
+            const SizedBox(height: 8),
+            AuthFooterLink(
+              prompt: "Don't have an account?",
+              actionLabel: 'Create one',
+              onPressed: _busy
+                  ? null
+                  : () {
+                      ref.read(authPageProvider.notifier).state = AuthPage.register;
+                    },
+            ),
+          ],
         ),
       ),
     );

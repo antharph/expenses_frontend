@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../application/auth_page.dart';
 import '../application/session_notifier.dart';
+import 'widgets/auth_form_widgets.dart';
 
 class RegisterScreen extends ConsumerStatefulWidget {
   const RegisterScreen({super.key});
@@ -61,132 +62,133 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
   @override
   Widget build(BuildContext context) {
     final busy = _submitting;
+    final scheme = Theme.of(context).colorScheme;
 
     return Scaffold(
-      body: SafeArea(
-        child: Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 420),
-            child: ListView(
-              padding: const EdgeInsets.all(24),
-              children: [
-                Text(
-                  'Create account',
-                  style: Theme.of(context).textTheme.headlineMedium,
-                ),
-                if (_registerError != null) ...[
+      body: AuthScaffold(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const AuthHeader(
+              title: 'Create account',
+              subtitle: 'Set up your account to start tracking expenses.',
+            ),
+            if (_registerError != null) ...[
+              const SizedBox(height: 20),
+              AuthErrorBanner(message: _registerError!),
+            ],
+            const SizedBox(height: 28),
+            Form(
+              key: _formKey,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  TextFormField(
+                    controller: _name,
+                    textCapitalization: TextCapitalization.words,
+                    textInputAction: TextInputAction.next,
+                    autofillHints: const [AutofillHints.name],
+                    decoration: authFieldDecoration(
+                      context,
+                      label: 'Name',
+                      prefixIcon: Icon(
+                        Icons.person_outline_rounded,
+                        color: scheme.onSurfaceVariant,
+                      ),
+                    ),
+                    validator: (value) {
+                      if (value == null || value.trim().isEmpty) {
+                        return 'Enter your name';
+                      }
+                      return null;
+                    },
+                  ),
                   const SizedBox(height: 12),
-                  Text(
-                    _registerError!,
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: Theme.of(context).colorScheme.error,
-                        ),
+                  TextFormField(
+                    controller: _email,
+                    keyboardType: TextInputType.emailAddress,
+                    textInputAction: TextInputAction.next,
+                    autofillHints: const [AutofillHints.email],
+                    decoration: authFieldDecoration(
+                      context,
+                      label: 'Email',
+                      prefixIcon: Icon(
+                        Icons.mail_outline_rounded,
+                        color: scheme.onSurfaceVariant,
+                      ),
+                    ),
+                    validator: (value) {
+                      final v = value?.trim() ?? '';
+                      if (v.isEmpty) {
+                        return 'Enter your email';
+                      }
+                      if (!v.contains('@')) {
+                        return 'Enter a valid email';
+                      }
+                      return null;
+                    },
+                  ),
+                  const SizedBox(height: 12),
+                  AuthPasswordField(
+                    controller: _password,
+                    label: 'Password',
+                    autofillHints: const [AutofillHints.newPassword],
+                    validator: (value) {
+                      if (value == null || value.isEmpty) {
+                        return 'Enter a password';
+                      }
+                      if (value.length < 8) {
+                        return 'Use at least 8 characters';
+                      }
+                      return null;
+                    },
+                  ),
+                  const SizedBox(height: 12),
+                  AuthPasswordField(
+                    controller: _passwordConfirmation,
+                    label: 'Confirm password',
+                    autofillHints: const [AutofillHints.newPassword],
+                    validator: (value) {
+                      if (value == null || value.isEmpty) {
+                        return 'Confirm your password';
+                      }
+                      if (value != _password.text) {
+                        return 'Passwords do not match';
+                      }
+                      return null;
+                    },
+                  ),
+                  const SizedBox(height: 24),
+                  FilledButton(
+                    onPressed: busy ? null : _submit,
+                    style: FilledButton.styleFrom(
+                      minimumSize: const Size.fromHeight(48),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    child: busy
+                        ? const SizedBox(
+                            width: 22,
+                            height: 22,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Text('Create account'),
                   ),
                 ],
-                const SizedBox(height: 24),
-                Form(
-                  key: _formKey,
-                  child: Column(
-                    children: [
-                      TextFormField(
-                        controller: _name,
-                        textCapitalization: TextCapitalization.words,
-                        decoration: const InputDecoration(
-                          labelText: 'Name',
-                          border: OutlineInputBorder(),
-                        ),
-                        validator: (value) {
-                          if (value == null || value.trim().isEmpty) {
-                            return 'Enter your name';
-                          }
-                          return null;
-                        },
-                      ),
-                      const SizedBox(height: 16),
-                      TextFormField(
-                        controller: _email,
-                        keyboardType: TextInputType.emailAddress,
-                        autofillHints: const [AutofillHints.email],
-                        decoration: const InputDecoration(
-                          labelText: 'Email',
-                          border: OutlineInputBorder(),
-                        ),
-                        validator: (value) {
-                          final v = value?.trim() ?? '';
-                          if (v.isEmpty) {
-                            return 'Enter your email';
-                          }
-                          if (!v.contains('@')) {
-                            return 'Enter a valid email';
-                          }
-                          return null;
-                        },
-                      ),
-                      const SizedBox(height: 16),
-                      TextFormField(
-                        controller: _password,
-                        obscureText: true,
-                        autofillHints: const [AutofillHints.newPassword],
-                        decoration: const InputDecoration(
-                          labelText: 'Password',
-                          border: OutlineInputBorder(),
-                        ),
-                        validator: (value) {
-                          if (value == null || value.isEmpty) {
-                            return 'Enter a password';
-                          }
-                          if (value.length < 8) {
-                            return 'Use at least 8 characters';
-                          }
-                          return null;
-                        },
-                      ),
-                      const SizedBox(height: 16),
-                      TextFormField(
-                        controller: _passwordConfirmation,
-                        obscureText: true,
-                        autofillHints: const [AutofillHints.newPassword],
-                        decoration: const InputDecoration(
-                          labelText: 'Confirm password',
-                          border: OutlineInputBorder(),
-                        ),
-                        validator: (value) {
-                          if (value != _password.text) {
-                            return 'Passwords do not match';
-                          }
-                          return null;
-                        },
-                      ),
-                      const SizedBox(height: 16),
-                      FilledButton(
-                        onPressed: busy ? null : _submit,
-                        style: FilledButton.styleFrom(
-                          minimumSize: const Size.fromHeight(48),
-                        ),
-                        child: busy
-                            ? const SizedBox(
-                                width: 22,
-                                height: 22,
-                                child: CircularProgressIndicator(strokeWidth: 2),
-                              )
-                            : const Text('Create account'),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 8),
-                TextButton(
-                  onPressed: busy
-                      ? null
-                      : () {
-                          ref.read(authPageProvider.notifier).state =
-                              AuthPage.login;
-                        },
-                  child: const Text('Already have an account? Sign in'),
-                ),
-              ],
+              ),
             ),
-          ),
+            const SizedBox(height: 8),
+            AuthFooterLink(
+              prompt: 'Already have an account?',
+              actionLabel: 'Sign in',
+              onPressed: busy
+                  ? null
+                  : () {
+                      ref.read(authPageProvider.notifier).state = AuthPage.login;
+                    },
+            ),
+          ],
         ),
       ),
     );
