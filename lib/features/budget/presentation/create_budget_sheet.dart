@@ -9,6 +9,7 @@ import '../../expenses/application/categories_provider.dart';
 import '../../expenses/domain/expense_category.dart';
 import '../application/budget_providers.dart';
 import '../data/budgets_api.dart';
+import '../domain/budget_progress.dart';
 
 enum _BudgetResetOption {
   semiMonthly('date_fixed', '1st and 16th', [1, 16]),
@@ -24,7 +25,9 @@ enum _BudgetResetOption {
 }
 
 class CreateBudgetSheet extends ConsumerStatefulWidget {
-  const CreateBudgetSheet({super.key});
+  const CreateBudgetSheet({super.key, this.existingBudgets = const []});
+
+  final List<BudgetProgress> existingBudgets;
 
   @override
   ConsumerState<CreateBudgetSheet> createState() => _CreateBudgetSheetState();
@@ -83,10 +86,10 @@ class _CreateBudgetSheetState extends ConsumerState<CreateBudgetSheet> {
       if (!mounted) {
         return;
       }
-      Navigator.of(context).pop();
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Budget created.')));
+      final navigator = Navigator.of(context);
+      final messenger = ScaffoldMessenger.of(context);
+      navigator.pop();
+      messenger.showSnackBar(const SnackBar(content: Text('Budget created.')));
     } on DioException catch (e) {
       setState(() {
         _saving = false;
@@ -98,6 +101,13 @@ class _CreateBudgetSheetState extends ConsumerState<CreateBudgetSheet> {
         _error = e.toString();
       });
     }
+  }
+
+  Set<int> get _assignedCategoryIds {
+    return widget.existingBudgets
+        .expand((budget) => budget.categories)
+        .map((category) => category.id)
+        .toSet();
   }
 
   InputDecoration _fieldDecoration(
@@ -160,6 +170,7 @@ class _CreateBudgetSheetState extends ConsumerState<CreateBudgetSheet> {
             _BudgetCategoryField(
               categoriesAsync: categoriesAsync,
               selectedCategoryIds: _selectedCategoryIds,
+              disabledCategoryIds: _assignedCategoryIds,
               enabled: !_saving,
               onChanged: (categoryId, selected) {
                 setState(() {
@@ -209,6 +220,172 @@ class _CreateBudgetSheetState extends ConsumerState<CreateBudgetSheet> {
   }
 }
 
+class EditBudgetCategoriesSheet extends ConsumerStatefulWidget {
+  const EditBudgetCategoriesSheet({
+    super.key,
+    required this.budget,
+    required this.existingBudgets,
+  });
+
+  final BudgetProgress budget;
+  final List<BudgetProgress> existingBudgets;
+
+  @override
+  ConsumerState<EditBudgetCategoriesSheet> createState() =>
+      _EditBudgetCategoriesSheetState();
+}
+
+class _EditBudgetCategoriesSheetState
+    extends ConsumerState<EditBudgetCategoriesSheet> {
+  late final Set<int> _selectedCategoryIds;
+  bool _saving = false;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _selectedCategoryIds = widget.budget.categories
+        .map((category) => category.id)
+        .toSet();
+  }
+
+  Set<int> get _assignedCategoryIds {
+    return widget.existingBudgets
+        .where((budget) => budget.id != widget.budget.id)
+        .expand((budget) => budget.categories)
+        .map((category) => category.id)
+        .toSet();
+  }
+
+  Future<void> _save() async {
+    if (_selectedCategoryIds.isEmpty) {
+      setState(() => _error = 'Keep at least one category selected.');
+      return;
+    }
+
+    final token = ref.read(sessionProvider).valueOrNull?.token;
+    if (token == null) {
+      setState(() => _error = 'Not signed in.');
+      return;
+    }
+
+    setState(() {
+      _saving = true;
+      _error = null;
+    });
+
+    try {
+      final updatedBudget = await ref
+          .read(budgetsApiProvider)
+          .updateBudgetCategories(
+            token: token,
+            budgetId: widget.budget.id,
+            categoryIds: _selectedCategoryIds.toList(),
+          );
+      ref.invalidate(dashboardBudgetsProvider);
+      ref.invalidate(budgetLogsProvider(widget.budget.id));
+      if (!mounted) {
+        return;
+      }
+      final navigator = Navigator.of(context);
+      final messenger = ScaffoldMessenger.of(context);
+      navigator.pop(updatedBudget);
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Budget categories updated.')),
+      );
+    } on DioException catch (e) {
+      setState(() {
+        _saving = false;
+        _error = formatApiError(e);
+      });
+    } catch (e) {
+      setState(() {
+        _saving = false;
+        _error = e.toString();
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final bottomInset = MediaQuery.viewInsetsOf(context).bottom;
+    final safeBottom = MediaQuery.paddingOf(context).bottom;
+    final categoriesAsync = ref.watch(expenseCategoriesProvider);
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+
+    return SingleChildScrollView(
+      padding: EdgeInsets.fromLTRB(20, 4, 20, bottomInset + safeBottom + 20),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            'Edit categories',
+            style: theme.textTheme.headlineSmall?.copyWith(
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Choose the categories this budget should track. At least one category must remain selected.',
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: scheme.onSurfaceVariant,
+            ),
+          ),
+          const SizedBox(height: 20),
+          _BudgetCategoryField(
+            categoriesAsync: categoriesAsync,
+            selectedCategoryIds: _selectedCategoryIds,
+            disabledCategoryIds: _assignedCategoryIds,
+            enabled: !_saving,
+            onChanged: (categoryId, selected) {
+              setState(() {
+                if (selected) {
+                  _selectedCategoryIds.add(categoryId);
+                } else if (_selectedCategoryIds.length > 1) {
+                  _selectedCategoryIds.remove(categoryId);
+                }
+                _error = null;
+              });
+            },
+          ),
+          if (_error != null) ...[
+            const SizedBox(height: 16),
+            _FormErrorBanner(message: _error!),
+          ],
+          const SizedBox(height: 24),
+          FilledButton(
+            onPressed: _saving ? null : _save,
+            style: FilledButton.styleFrom(
+              minimumSize: const Size.fromHeight(52),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(14),
+              ),
+            ),
+            child: _saving
+                ? const SizedBox(
+                    height: 22,
+                    width: 22,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Colors.white,
+                    ),
+                  )
+                : Text(
+                    'Save categories',
+                    style: theme.textTheme.titleSmall?.copyWith(
+                      color: scheme.onPrimary,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _BudgetDetailsSection extends StatelessWidget {
   const _BudgetDetailsSection({
     required this.saving,
@@ -226,8 +403,12 @@ class _BudgetDetailsSection extends StatelessWidget {
   final TextEditingController amountController;
   final _BudgetResetOption resetOption;
   final bool rollover;
-  final InputDecoration Function(BuildContext, {required String label, String? hint})
-      fieldDecoration;
+  final InputDecoration Function(
+    BuildContext, {
+    required String label,
+    String? hint,
+  })
+  fieldDecoration;
   final ValueChanged<_BudgetResetOption> onResetChanged;
   final ValueChanged<bool> onRolloverChanged;
 
@@ -336,20 +517,20 @@ class _BudgetCategoryField extends StatelessWidget {
   const _BudgetCategoryField({
     required this.categoriesAsync,
     required this.selectedCategoryIds,
+    required this.disabledCategoryIds,
     required this.enabled,
     required this.onChanged,
   });
 
   final AsyncValue<List<ExpenseCategory>> categoriesAsync;
   final Set<int> selectedCategoryIds;
+  final Set<int> disabledCategoryIds;
   final bool enabled;
   final void Function(int categoryId, bool selected) onChanged;
 
   List<ExpenseCategory> _orderedCategories(List<ExpenseCategory> categories) {
     final sorted = List<ExpenseCategory>.from(categories)
-      ..sort(
-        (a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()),
-      );
+      ..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
     return sorted;
   }
 
@@ -369,7 +550,7 @@ class _BudgetCategoryField extends StatelessWidget {
         ),
         const SizedBox(height: 4),
         Text(
-          'Select at least one category to track.',
+          'Select at least one category to track. Categories already used by another active budget are unavailable.',
           style: theme.textTheme.bodySmall?.copyWith(
             color: scheme.onSurfaceVariant,
           ),
@@ -392,17 +573,35 @@ class _BudgetCategoryField extends StatelessWidget {
               spacing: 8,
               runSpacing: 8,
               children: [
-                for (final category in ordered)
-                  _CategoryChoiceChip(
-                    label: category.name,
-                    selected: selectedCategoryIds.contains(category.id),
-                    accent: _categoryAccent(scheme, category.name),
-                    enabled: enabled,
-                    onTap: () => onChanged(
-                      category.id,
-                      !selectedCategoryIds.contains(category.id),
-                    ),
+                for (final category in ordered) ...[
+                  Builder(
+                    builder: (context) {
+                      final selected = selectedCategoryIds.contains(
+                        category.id,
+                      );
+                      final disabledByBudget = disabledCategoryIds.contains(
+                        category.id,
+                      );
+                      final isLastSelected =
+                          selected && selectedCategoryIds.length == 1;
+                      final canChange =
+                          enabled && !disabledByBudget && !isLastSelected;
+
+                      return _CategoryChoiceChip(
+                        label: category.name,
+                        selected: selected,
+                        accent: _categoryAccent(scheme, category.name),
+                        enabled: canChange,
+                        disabledReason: disabledByBudget
+                            ? 'Already used'
+                            : isLastSelected
+                            ? 'Required'
+                            : null,
+                        onTap: () => onChanged(category.id, !selected),
+                      );
+                    },
                   ),
+                ],
               ],
             );
           },
@@ -432,6 +631,7 @@ class _CategoryChoiceChip extends StatelessWidget {
     required this.selected,
     required this.accent,
     required this.enabled,
+    this.disabledReason,
     required this.onTap,
   });
 
@@ -439,6 +639,7 @@ class _CategoryChoiceChip extends StatelessWidget {
   final bool selected;
   final Color accent;
   final bool enabled;
+  final String? disabledReason;
   final VoidCallback onTap;
 
   @override
@@ -446,9 +647,18 @@ class _CategoryChoiceChip extends StatelessWidget {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
 
+    final muted = !enabled && !selected;
+    final foregroundColor = selected
+        ? scheme.onPrimaryContainer
+        : muted
+        ? scheme.onSurfaceVariant.withValues(alpha: 0.55)
+        : scheme.onSurfaceVariant;
+
     return Material(
       color: selected
           ? scheme.primaryContainer.withValues(alpha: 0.55)
+          : muted
+          ? scheme.surfaceContainerLow.withValues(alpha: 0.55)
           : scheme.surfaceContainerLow,
       borderRadius: BorderRadius.circular(20),
       child: InkWell(
@@ -465,7 +675,11 @@ class _CategoryChoiceChip extends StatelessWidget {
                   width: 8,
                   height: 8,
                   decoration: BoxDecoration(
-                    color: selected ? scheme.primary : accent,
+                    color: muted
+                        ? scheme.outline.withValues(alpha: 0.45)
+                        : selected
+                        ? scheme.primary
+                        : accent,
                     shape: BoxShape.circle,
                   ),
                 ),
@@ -473,12 +687,19 @@ class _CategoryChoiceChip extends StatelessWidget {
                 Text(
                   _displayLabel(label),
                   style: theme.textTheme.labelLarge?.copyWith(
-                    color: selected
-                        ? scheme.onPrimaryContainer
-                        : scheme.onSurfaceVariant,
+                    color: foregroundColor,
                     fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
                   ),
                 ),
+                if (disabledReason != null) ...[
+                  const SizedBox(width: 6),
+                  Text(
+                    disabledReason!,
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: foregroundColor,
+                    ),
+                  ),
+                ],
               ],
             ),
           ),

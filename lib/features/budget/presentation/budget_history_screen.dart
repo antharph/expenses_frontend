@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
@@ -7,18 +9,20 @@ import '../../auth/application/session_notifier.dart';
 import '../application/budget_providers.dart';
 import '../data/budgets_api.dart';
 import '../domain/budget_log_entry.dart';
+import '../domain/budget_progress.dart';
+import 'create_budget_sheet.dart';
 
 const double _kHistoryGutter = 20;
 
 class BudgetHistoryScreen extends ConsumerStatefulWidget {
   const BudgetHistoryScreen({
     super.key,
-    required this.budgetId,
-    required this.budgetName,
+    required this.budget,
+    required this.budgets,
   });
 
-  final int budgetId;
-  final String budgetName;
+  final BudgetProgress budget;
+  final List<BudgetProgress> budgets;
 
   @override
   ConsumerState<BudgetHistoryScreen> createState() =>
@@ -26,12 +30,18 @@ class BudgetHistoryScreen extends ConsumerStatefulWidget {
 }
 
 class _BudgetHistoryScreenState extends ConsumerState<BudgetHistoryScreen> {
+  late BudgetProgress _budget;
+  late List<BudgetProgress> _budgets;
   bool _deleting = false;
 
-  static final _currency = NumberFormat.currency(
-    symbol: r'',
-    decimalDigits: 0,
-  );
+  static final _currency = NumberFormat.currency(symbol: r'', decimalDigits: 0);
+
+  @override
+  void initState() {
+    super.initState();
+    _budget = widget.budget;
+    _budgets = widget.budgets;
+  }
 
   String _periodLabel(BudgetLogEntry entry) {
     final start = DateFormat.MMMd().format(entry.startDate);
@@ -49,8 +59,31 @@ class _BudgetHistoryScreenState extends ConsumerState<BudgetHistoryScreen> {
   }
 
   Future<void> _refreshLogs() async {
-    ref.invalidate(budgetLogsProvider(widget.budgetId));
-    await ref.read(budgetLogsProvider(widget.budgetId).future);
+    ref.invalidate(budgetLogsProvider(_budget.id));
+    await ref.read(budgetLogsProvider(_budget.id).future);
+  }
+
+  Future<void> _showEditCategoriesSheet() async {
+    final updatedBudget = await showModalBottomSheet<BudgetProgress>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      showDragHandle: true,
+      builder: (_) =>
+          EditBudgetCategoriesSheet(budget: _budget, existingBudgets: _budgets),
+    );
+
+    if (updatedBudget == null || !mounted) {
+      return;
+    }
+
+    setState(() {
+      _budget = updatedBudget;
+      _budgets = [
+        for (final budget in _budgets)
+          if (budget.id == updatedBudget.id) updatedBudget else budget,
+      ];
+    });
   }
 
   Future<void> _confirmDelete() async {
@@ -59,7 +92,7 @@ class _BudgetHistoryScreenState extends ConsumerState<BudgetHistoryScreen> {
       builder: (context) => AlertDialog(
         title: const Text('Delete budget'),
         content: Text(
-          'Remove "${_displayLabel(widget.budgetName)}"? Period history will be deleted. This cannot be undone.',
+          'Remove "${_displayLabel(_budget.name)}"? Period history will be deleted. This cannot be undone.',
         ),
         actions: [
           TextButton(
@@ -82,19 +115,18 @@ class _BudgetHistoryScreenState extends ConsumerState<BudgetHistoryScreen> {
       if (!mounted) {
         return;
       }
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Not signed in.')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Not signed in.')));
       return;
     }
 
     setState(() => _deleting = true);
 
     try {
-      await ref.read(budgetsApiProvider).deleteBudget(
-            token: token,
-            budgetId: widget.budgetId,
-          );
+      await ref
+          .read(budgetsApiProvider)
+          .deleteBudget(token: token, budgetId: _budget.id);
       ref.invalidate(dashboardBudgetsProvider);
       if (!mounted) {
         return;
@@ -104,9 +136,9 @@ class _BudgetHistoryScreenState extends ConsumerState<BudgetHistoryScreen> {
       if (!mounted) {
         return;
       }
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(formatApiError(error))),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(formatApiError(error))));
     } finally {
       if (mounted) {
         setState(() => _deleting = false);
@@ -116,24 +148,31 @@ class _BudgetHistoryScreenState extends ConsumerState<BudgetHistoryScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final logsAsync = ref.watch(budgetLogsProvider(widget.budgetId));
+    final logsAsync = ref.watch(budgetLogsProvider(_budget.id));
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(_displayLabel(widget.budgetName)),
+        title: Text(_displayLabel(_budget.name)),
         scrolledUnderElevation: 0,
         surfaceTintColor: Colors.transparent,
         actions: [
           PopupMenuButton<String>(
             enabled: !_deleting,
             onSelected: (value) {
+              if (value == 'edit_categories') {
+                unawaited(_showEditCategoriesSheet());
+              }
               if (value == 'delete') {
                 _confirmDelete();
               }
             },
             itemBuilder: (context) => [
+              const PopupMenuItem<String>(
+                value: 'edit_categories',
+                child: Text('Edit categories'),
+              ),
               PopupMenuItem<String>(
                 value: 'delete',
                 child: Text(
@@ -221,9 +260,7 @@ class _BudgetHistoryScreenState extends ConsumerState<BudgetHistoryScreen> {
                       onPressed: _deleting
                           ? null
                           : () {
-                              ref.invalidate(
-                                budgetLogsProvider(widget.budgetId),
-                              );
+                              ref.invalidate(budgetLogsProvider(_budget.id));
                             },
                       icon: const Icon(Icons.refresh),
                       label: const Text('Retry'),
@@ -273,9 +310,7 @@ class _CurrentPeriodCard extends StatelessWidget {
       color: scheme.surface,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
-        side: BorderSide(
-          color: scheme.outlineVariant.withValues(alpha: 0.55),
-        ),
+        side: BorderSide(color: scheme.outlineVariant.withValues(alpha: 0.55)),
       ),
       child: Padding(
         padding: const EdgeInsets.all(20),
@@ -467,7 +502,12 @@ class _BudgetHistorySkeleton extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
 
     return ListView(
-      padding: const EdgeInsets.fromLTRB(_kHistoryGutter, 8, _kHistoryGutter, 24),
+      padding: const EdgeInsets.fromLTRB(
+        _kHistoryGutter,
+        8,
+        _kHistoryGutter,
+        24,
+      ),
       physics: const NeverScrollableScrollPhysics(),
       children: [
         Material(
@@ -504,11 +544,7 @@ class _BudgetHistorySkeleton extends StatelessWidget {
 }
 
 class _Bone extends StatelessWidget {
-  const _Bone({
-    required this.width,
-    required this.height,
-    this.radius = 6,
-  });
+  const _Bone({required this.width, required this.height, this.radius = 6});
 
   final double width;
   final double height;

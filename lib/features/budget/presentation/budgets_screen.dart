@@ -16,13 +16,16 @@ const double _kBudgetsContentGutter = 20;
 class BudgetsScreen extends ConsumerWidget {
   const BudgetsScreen({super.key});
 
-  void _showCreateBudgetSheet(BuildContext context) {
+  void _showCreateBudgetSheet(
+    BuildContext context,
+    List<BudgetProgress> budgets,
+  ) {
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
       showDragHandle: true,
-      builder: (_) => const CreateBudgetSheet(),
+      builder: (_) => CreateBudgetSheet(existingBudgets: budgets),
     );
   }
 
@@ -46,7 +49,7 @@ class BudgetsScreen extends ConsumerWidget {
         data: (budgets) => budgets.isEmpty
             ? null
             : FloatingActionButton.extended(
-                onPressed: () => _showCreateBudgetSheet(context),
+                onPressed: () => _showCreateBudgetSheet(context, budgets),
                 icon: const Icon(Icons.add),
                 label: const Text('Create budget'),
               ),
@@ -60,7 +63,8 @@ class BudgetsScreen extends ConsumerWidget {
               child: Align(
                 alignment: const Alignment(0, -0.2),
                 child: _EmptyBudgetPrompt(
-                  onCreateBudget: () => _showCreateBudgetSheet(context),
+                  onCreateBudget: () =>
+                      _showCreateBudgetSheet(context, budgets),
                 ),
               ),
             );
@@ -95,8 +99,8 @@ class BudgetsScreen extends ConsumerWidget {
                     Navigator.of(context).push(
                       MaterialPageRoute<void>(
                         builder: (_) => BudgetHistoryScreen(
-                          budgetId: budget.id,
-                          budgetName: budget.name,
+                          budget: budget,
+                          budgets: budgets,
                         ),
                       ),
                     );
@@ -170,7 +174,9 @@ class _BudgetsSummaryHeader extends StatelessWidget {
       (sum, budget) => sum + budget.remainingAmount,
     );
     final overCount = budgets.where((b) => b.isOverBudget).length;
-    final budgetLabel = budgets.length == 1 ? '1 budget' : '${budgets.length} budgets';
+    final budgetLabel = budgets.length == 1
+        ? '1 budget'
+        : '${budgets.length} budgets';
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -194,9 +200,7 @@ class _BudgetsSummaryHeader extends StatelessWidget {
         ),
         const SizedBox(height: 4),
         Text(
-          overCount > 0
-              ? '$budgetLabel · $overCount over limit'
-              : budgetLabel,
+          overCount > 0 ? '$budgetLabel · $overCount over limit' : budgetLabel,
           style: theme.textTheme.bodyMedium?.copyWith(
             color: scheme.onSurfaceVariant,
           ),
@@ -218,7 +222,8 @@ class _EmptyBudgetPrompt extends StatelessWidget {
 
     return Semantics(
       container: true,
-      label: 'No budgets yet. Create a budget to track what remains for each pay period.',
+      label:
+          'No budgets yet. Create a budget to track what remains for each pay period.',
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 420),
         child: Column(

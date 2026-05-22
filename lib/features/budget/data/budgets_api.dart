@@ -94,6 +94,20 @@ class BudgetsApi {
     await _client(token).delete<void>('/api/v1/budgets/$budgetId');
   }
 
+  Future<BudgetProgress> updateBudgetCategories({
+    required String token,
+    required int budgetId,
+    required List<int> categoryIds,
+  }) async {
+    final response = await _client(token).patch<Map<String, dynamic>>(
+      '/api/v1/budgets/$budgetId/categories',
+      data: <String, dynamic>{'category_ids': categoryIds},
+    );
+    final body = response.data ?? <String, dynamic>{};
+    final data = body['data'];
+    return BudgetProgress.fromJson(Map<String, dynamic>.from(data as Map));
+  }
+
   Future<List<BudgetLogEntry>> listBudgetLogs({
     required String token,
     required int budgetId,
