@@ -23,18 +23,12 @@ class _MinQuantityInputFormatter extends TextInputFormatter {
     TextEditingValue newValue,
   ) {
     if (newValue.text.isEmpty) {
-      return const TextEditingValue(
-        text: '1',
-        selection: TextSelection.collapsed(offset: 1),
-      );
+      return newValue;
     }
 
     final parsed = int.tryParse(newValue.text);
     if (parsed != null && parsed < 1) {
-      return const TextEditingValue(
-        text: '1',
-        selection: TextSelection.collapsed(offset: 1),
-      );
+      return oldValue;
     }
 
     return newValue;
