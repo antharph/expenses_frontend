@@ -11,17 +11,14 @@ import '../application/budget_providers.dart';
 import '../data/budgets_api.dart';
 import '../domain/budget_progress.dart';
 
-enum _BudgetResetOption {
-  semiMonthly('date_fixed', '1st and 16th', [1, 16]),
-  monthly('date_fixed', 'Monthly', [1]),
-  weekly('interval', 'Weekly', [7]),
-  manual('manual', 'Manual', null);
+enum _BudgetResetType {
+  dateFixed('date_fixed', 'Fixed dates'),
+  manual('manual', 'Manual');
 
-  const _BudgetResetOption(this.apiValue, this.label, this.resetDays);
+  const _BudgetResetType(this.apiValue, this.label);
 
   final String apiValue;
   final String label;
-  final List<int>? resetDays;
 }
 
 class CreateBudgetSheet extends ConsumerStatefulWidget {
@@ -38,8 +35,9 @@ class _CreateBudgetSheetState extends ConsumerState<CreateBudgetSheet> {
   final _nameController = TextEditingController();
   final _amountController = TextEditingController();
   final Set<int> _selectedCategoryIds = {};
+  final Set<int> _selectedResetDays = {1, 16};
 
-  _BudgetResetOption _resetOption = _BudgetResetOption.semiMonthly;
+  _BudgetResetType _resetType = _BudgetResetType.dateFixed;
   bool _rollover = true;
   bool _saving = false;
   String? _error;
@@ -57,6 +55,11 @@ class _CreateBudgetSheetState extends ConsumerState<CreateBudgetSheet> {
     }
     if (_selectedCategoryIds.isEmpty) {
       setState(() => _error = 'Select at least one category.');
+      return;
+    }
+    if (_resetType == _BudgetResetType.dateFixed &&
+        _selectedResetDays.isEmpty) {
+      setState(() => _error = 'Select at least one reset day.');
       return;
     }
     final token = ref.read(sessionProvider).valueOrNull?.token;
@@ -77,8 +80,10 @@ class _CreateBudgetSheetState extends ConsumerState<CreateBudgetSheet> {
             token: token,
             name: _nameController.text.trim(),
             amount: _amountController.text.trim(),
-            resetType: _resetOption.apiValue,
-            resetDays: _resetOption.resetDays,
+            resetType: _resetType.apiValue,
+            resetDays: _resetType == _BudgetResetType.dateFixed
+                ? (_selectedResetDays.toList()..sort())
+                : null,
             rollover: _rollover,
             categoryIds: _selectedCategoryIds.toList(),
           );
@@ -160,10 +165,22 @@ class _CreateBudgetSheetState extends ConsumerState<CreateBudgetSheet> {
               saving: _saving,
               nameController: _nameController,
               amountController: _amountController,
-              resetOption: _resetOption,
+              resetType: _resetType,
+              selectedResetDays: _selectedResetDays,
               rollover: _rollover,
               fieldDecoration: _fieldDecoration,
-              onResetChanged: (value) => setState(() => _resetOption = value),
+              onResetTypeChanged: (value) => setState(() {
+                _resetType = value;
+                _error = null;
+              }),
+              onResetDayChanged: (day, selected) => setState(() {
+                if (selected) {
+                  _selectedResetDays.add(day);
+                } else if (_selectedResetDays.length > 1) {
+                  _selectedResetDays.remove(day);
+                }
+                _error = null;
+              }),
               onRolloverChanged: (value) => setState(() => _rollover = value),
             ),
             const SizedBox(height: 16),
@@ -391,17 +408,20 @@ class _BudgetDetailsSection extends StatelessWidget {
     required this.saving,
     required this.nameController,
     required this.amountController,
-    required this.resetOption,
+    required this.resetType,
+    required this.selectedResetDays,
     required this.rollover,
     required this.fieldDecoration,
-    required this.onResetChanged,
+    required this.onResetTypeChanged,
+    required this.onResetDayChanged,
     required this.onRolloverChanged,
   });
 
   final bool saving;
   final TextEditingController nameController;
   final TextEditingController amountController;
-  final _BudgetResetOption resetOption;
+  final _BudgetResetType resetType;
+  final Set<int> selectedResetDays;
   final bool rollover;
   final InputDecoration Function(
     BuildContext, {
@@ -409,7 +429,8 @@ class _BudgetDetailsSection extends StatelessWidget {
     String? hint,
   })
   fieldDecoration;
-  final ValueChanged<_BudgetResetOption> onResetChanged;
+  final ValueChanged<_BudgetResetType> onResetTypeChanged;
+  final void Function(int day, bool selected) onResetDayChanged;
   final ValueChanged<bool> onRolloverChanged;
 
   @override
@@ -466,10 +487,10 @@ class _BudgetDetailsSection extends StatelessWidget {
               },
             ),
             const SizedBox(height: 12),
-            DropdownButtonFormField<_BudgetResetOption>(
-              initialValue: resetOption,
-              decoration: fieldDecoration(context, label: 'Reset cadence'),
-              items: _BudgetResetOption.values
+            DropdownButtonFormField<_BudgetResetType>(
+              initialValue: resetType,
+              decoration: fieldDecoration(context, label: 'Reset type'),
+              items: _BudgetResetType.values
                   .map(
                     (option) => DropdownMenuItem(
                       value: option,
@@ -483,9 +504,17 @@ class _BudgetDetailsSection extends StatelessWidget {
                       if (value == null) {
                         return;
                       }
-                      onResetChanged(value);
+                      onResetTypeChanged(value);
                     },
             ),
+            if (resetType == _BudgetResetType.dateFixed) ...[
+              const SizedBox(height: 12),
+              _ResetDayPicker(
+                selectedDays: selectedResetDays,
+                enabled: !saving,
+                onChanged: onResetDayChanged,
+              ),
+            ],
             const SizedBox(height: 4),
             Material(
               color: scheme.surface,
@@ -504,6 +533,73 @@ class _BudgetDetailsSection extends StatelessWidget {
                 ),
                 value: rollover,
                 onChanged: saving ? null : onRolloverChanged,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ResetDayPicker extends StatelessWidget {
+  const _ResetDayPicker({
+    required this.selectedDays,
+    required this.enabled,
+    required this.onChanged,
+  });
+
+  final Set<int> selectedDays;
+  final bool enabled;
+  final void Function(int day, bool selected) onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final orderedDays = selectedDays.toList()..sort();
+
+    return Material(
+      color: scheme.surface,
+      borderRadius: BorderRadius.circular(12),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Reset days',
+              style: theme.textTheme.titleSmall?.copyWith(
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Choose one or more days. Shorter months reset on the final calendar day.',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: scheme.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: 10),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                for (var day = 1; day <= 31; day++)
+                  FilterChip(
+                    label: Text(day.toString()),
+                    selected: selectedDays.contains(day),
+                    onSelected: enabled
+                        ? (selected) => onChanged(day, selected)
+                        : null,
+                  ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Selected: ${orderedDays.map(_ordinalDay).join(', ')}',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: scheme.onSurfaceVariant,
               ),
             ),
           ],
@@ -762,6 +858,19 @@ String _displayLabel(String raw) {
         .join(' ');
   }
   return trimmed;
+}
+
+String _ordinalDay(int day) {
+  if (day >= 11 && day <= 13) {
+    return '${day}th';
+  }
+
+  return switch (day % 10) {
+    1 => '${day}st',
+    2 => '${day}nd',
+    3 => '${day}rd',
+    _ => '${day}th',
+  };
 }
 
 Color _categoryAccent(ColorScheme scheme, String label) {
