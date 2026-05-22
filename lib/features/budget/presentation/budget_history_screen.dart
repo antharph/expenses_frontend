@@ -33,6 +33,7 @@ class _BudgetHistoryScreenState extends ConsumerState<BudgetHistoryScreen> {
   late BudgetProgress _budget;
   late List<BudgetProgress> _budgets;
   bool _deleting = false;
+  bool _finalizing = false;
 
   static final _currency = NumberFormat.currency(symbol: r'', decimalDigits: 0);
 
@@ -146,6 +147,75 @@ class _BudgetHistoryScreenState extends ConsumerState<BudgetHistoryScreen> {
     }
   }
 
+  Future<void> _confirmFinalizeManual() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Finalize period'),
+        content: Text(
+          'Close the current period for "${_displayLabel(_budget.name)}"? Spending will be saved to history and a new manual period will start tomorrow.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Finalize'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) {
+      return;
+    }
+
+    final token = ref.read(sessionProvider).valueOrNull?.token;
+    if (token == null) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Not signed in.')));
+      return;
+    }
+
+    setState(() => _finalizing = true);
+
+    try {
+      final updatedBudget = await ref
+          .read(budgetsApiProvider)
+          .finalizeManualBudget(token: token, budgetId: _budget.id);
+      ref.invalidate(dashboardBudgetsProvider);
+      ref.invalidate(budgetLogsProvider(_budget.id));
+
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _budget = updatedBudget;
+        _budgets = [
+          for (final budget in _budgets)
+            if (budget.id == updatedBudget.id) updatedBudget else budget,
+        ];
+      });
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Budget period finalized.')));
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(formatApiError(error))));
+    } finally {
+      if (mounted) {
+        setState(() => _finalizing = false);
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final logsAsync = ref.watch(budgetLogsProvider(_budget.id));
@@ -159,8 +229,11 @@ class _BudgetHistoryScreenState extends ConsumerState<BudgetHistoryScreen> {
         surfaceTintColor: Colors.transparent,
         actions: [
           PopupMenuButton<String>(
-            enabled: !_deleting,
+            enabled: !_deleting && !_finalizing,
             onSelected: (value) {
+              if (value == 'finalize') {
+                unawaited(_confirmFinalizeManual());
+              }
               if (value == 'edit_categories') {
                 unawaited(_showEditCategoriesSheet());
               }
@@ -169,6 +242,11 @@ class _BudgetHistoryScreenState extends ConsumerState<BudgetHistoryScreen> {
               }
             },
             itemBuilder: (context) => [
+              if (_budget.isManual)
+                const PopupMenuItem<String>(
+                  value: 'finalize',
+                  child: Text('Finalize current period'),
+                ),
               const PopupMenuItem<String>(
                 value: 'edit_categories',
                 child: Text('Edit categories'),
@@ -270,7 +348,7 @@ class _BudgetHistoryScreenState extends ConsumerState<BudgetHistoryScreen> {
               ),
             ),
           ),
-          if (_deleting)
+          if (_deleting || _finalizing)
             Positioned.fill(
               child: ColoredBox(
                 color: scheme.scrim.withValues(alpha: 0.35),

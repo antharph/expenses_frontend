@@ -4,6 +4,7 @@ class BudgetProgress {
   const BudgetProgress({
     required this.id,
     required this.name,
+    required this.resetType,
     required this.categories,
     required this.rolloverEnabled,
     required this.periodStart,
@@ -18,6 +19,7 @@ class BudgetProgress {
 
   final int id;
   final String name;
+  final String resetType;
   final List<ExpenseCategory> categories;
   final bool rolloverEnabled;
   final DateTime periodStart;
@@ -28,6 +30,8 @@ class BudgetProgress {
   final double spentAmount;
   final double remainingAmount;
   final bool isOverBudget;
+
+  bool get isManual => resetType == 'manual';
 
   double get progressFraction {
     if (allocatedAmount <= 0) {
@@ -43,6 +47,7 @@ class BudgetProgress {
     return BudgetProgress(
       id: json['id'] as int,
       name: json['name']?.toString() ?? '',
+      resetType: json['reset_type']?.toString() ?? '',
       categories: _parseCategories(json['categories']),
       rolloverEnabled: json['rollover_enabled'] == true,
       periodStart: _parseDate(periodMap['start_date']) ?? DateTime.now(),

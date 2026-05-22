@@ -68,6 +68,7 @@ class BudgetsApi {
     required String amount,
     required String resetType,
     List<int>? resetDays,
+    String? startDate,
     bool rollover = false,
     List<int> categoryIds = const [],
   }) async {
@@ -78,10 +79,23 @@ class BudgetsApi {
         'amount': amount,
         'reset_type': resetType,
         'reset_days': resetDays,
+        'start_date': startDate,
         'rollover': rollover,
         'category_ids': categoryIds,
       },
     );
+    final body = response.data ?? <String, dynamic>{};
+    final data = body['data'];
+    return BudgetProgress.fromJson(Map<String, dynamic>.from(data as Map));
+  }
+
+  Future<BudgetProgress> finalizeManualBudget({
+    required String token,
+    required int budgetId,
+  }) async {
+    final response = await _client(
+      token,
+    ).post<Map<String, dynamic>>('/api/v1/budgets/$budgetId/finalize');
     final body = response.data ?? <String, dynamic>{};
     final data = body['data'];
     return BudgetProgress.fromJson(Map<String, dynamic>.from(data as Map));

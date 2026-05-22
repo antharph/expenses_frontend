@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/intl.dart';
 
 import '../../../core/errors/api_errors.dart';
 import '../../auth/application/session_notifier.dart';
@@ -36,6 +37,7 @@ class _CreateBudgetSheetState extends ConsumerState<CreateBudgetSheet> {
   final _amountController = TextEditingController();
   final Set<int> _selectedCategoryIds = {};
   final Set<int> _selectedResetDays = {1, 16};
+  DateTime _manualStartDate = DateTime.now();
 
   _BudgetResetType _resetType = _BudgetResetType.dateFixed;
   bool _rollover = true;
@@ -83,6 +85,9 @@ class _CreateBudgetSheetState extends ConsumerState<CreateBudgetSheet> {
             resetType: _resetType.apiValue,
             resetDays: _resetType == _BudgetResetType.dateFixed
                 ? (_selectedResetDays.toList()..sort())
+                : null,
+            startDate: _resetType == _BudgetResetType.manual
+                ? DateFormat('yyyy-MM-dd').format(_manualStartDate)
                 : null,
             rollover: _rollover,
             categoryIds: _selectedCategoryIds.toList(),
@@ -167,6 +172,7 @@ class _CreateBudgetSheetState extends ConsumerState<CreateBudgetSheet> {
               amountController: _amountController,
               resetType: _resetType,
               selectedResetDays: _selectedResetDays,
+              manualStartDate: _manualStartDate,
               rollover: _rollover,
               fieldDecoration: _fieldDecoration,
               onResetTypeChanged: (value) => setState(() {
@@ -179,6 +185,10 @@ class _CreateBudgetSheetState extends ConsumerState<CreateBudgetSheet> {
                 } else if (_selectedResetDays.length > 1) {
                   _selectedResetDays.remove(day);
                 }
+                _error = null;
+              }),
+              onManualStartDateChanged: (value) => setState(() {
+                _manualStartDate = value;
                 _error = null;
               }),
               onRolloverChanged: (value) => setState(() => _rollover = value),
@@ -410,10 +420,12 @@ class _BudgetDetailsSection extends StatelessWidget {
     required this.amountController,
     required this.resetType,
     required this.selectedResetDays,
+    required this.manualStartDate,
     required this.rollover,
     required this.fieldDecoration,
     required this.onResetTypeChanged,
     required this.onResetDayChanged,
+    required this.onManualStartDateChanged,
     required this.onRolloverChanged,
   });
 
@@ -422,6 +434,7 @@ class _BudgetDetailsSection extends StatelessWidget {
   final TextEditingController amountController;
   final _BudgetResetType resetType;
   final Set<int> selectedResetDays;
+  final DateTime manualStartDate;
   final bool rollover;
   final InputDecoration Function(
     BuildContext, {
@@ -431,6 +444,7 @@ class _BudgetDetailsSection extends StatelessWidget {
   fieldDecoration;
   final ValueChanged<_BudgetResetType> onResetTypeChanged;
   final void Function(int day, bool selected) onResetDayChanged;
+  final ValueChanged<DateTime> onManualStartDateChanged;
   final ValueChanged<bool> onRolloverChanged;
 
   @override
@@ -513,6 +527,14 @@ class _BudgetDetailsSection extends StatelessWidget {
                 selectedDays: selectedResetDays,
                 enabled: !saving,
                 onChanged: onResetDayChanged,
+              ),
+            ],
+            if (resetType == _BudgetResetType.manual) ...[
+              const SizedBox(height: 12),
+              _ManualStartDateField(
+                value: manualStartDate,
+                enabled: !saving,
+                onChanged: onManualStartDateChanged,
               ),
             ],
             const SizedBox(height: 4),
@@ -603,6 +625,82 @@ class _ResetDayPicker extends StatelessWidget {
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ManualStartDateField extends StatelessWidget {
+  const _ManualStartDateField({
+    required this.value,
+    required this.enabled,
+    required this.onChanged,
+  });
+
+  final DateTime value;
+  final bool enabled;
+  final ValueChanged<DateTime> onChanged;
+
+  Future<void> _pickDate(BuildContext context) async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: value,
+      firstDate: DateTime(2000),
+      lastDate: DateTime.now().add(const Duration(days: 365)),
+    );
+
+    if (picked != null) {
+      onChanged(DateTime(picked.year, picked.month, picked.day));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+
+    return Material(
+      color: scheme.surface,
+      borderRadius: BorderRadius.circular(12),
+      child: InkWell(
+        onTap: enabled ? () => _pickDate(context) : null,
+        borderRadius: BorderRadius.circular(12),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: 56),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            child: Row(
+              children: [
+                Icon(
+                  Icons.calendar_today_outlined,
+                  size: 20,
+                  color: scheme.onSurfaceVariant,
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(
+                        'Start date',
+                        style: theme.textTheme.labelLarge?.copyWith(
+                          color: scheme.onSurfaceVariant,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        DateFormat.yMMMd().format(value),
+                        style: theme.textTheme.titleSmall,
+                      ),
+                    ],
+                  ),
+                ),
+                Icon(Icons.expand_more, color: scheme.onSurfaceVariant),
+              ],
+            ),
+          ),
         ),
       ),
     );
