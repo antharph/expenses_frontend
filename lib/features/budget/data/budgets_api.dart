@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/config/api_config.dart';
 import '../domain/budget_log_entry.dart';
 import '../domain/budget_progress.dart';
+import '../domain/budget_type.dart';
 
 final budgetsApiProvider = Provider<BudgetsApi>((ref) => BudgetsApi());
 
@@ -46,6 +47,22 @@ class BudgetsApi {
         .toList();
   }
 
+  Future<List<BudgetType>> listBudgetTypes({required String token}) async {
+    final response = await _client(
+      token,
+    ).get<Map<String, dynamic>>('/api/v1/budget-types');
+    final body = response.data ?? <String, dynamic>{};
+    final raw = body['data'];
+    if (raw is! List<dynamic>) {
+      return [];
+    }
+    return raw
+        .map(
+          (e) => BudgetType.fromJson(Map<String, dynamic>.from(e as Map)),
+        )
+        .toList();
+  }
+
   Future<List<BudgetProgress>> syncBudgetCycles({required String token}) async {
     final response = await _client(
       token,
@@ -64,8 +81,9 @@ class BudgetsApi {
 
   Future<BudgetProgress> createBudget({
     required String token,
+    required int budgetTypeId,
     required String name,
-    required String amount,
+    String? amount,
     required String resetType,
     List<int>? resetDays,
     String? startDate,
@@ -75,6 +93,7 @@ class BudgetsApi {
     final response = await _client(token).post<Map<String, dynamic>>(
       '/api/v1/budgets',
       data: <String, dynamic>{
+        'budget_type_id': budgetTypeId,
         'name': name,
         'amount': amount,
         'reset_type': resetType,

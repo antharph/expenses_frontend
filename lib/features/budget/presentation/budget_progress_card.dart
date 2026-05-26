@@ -34,14 +34,116 @@ class BudgetProgressCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (budget.isTrackingOnly) {
+      return _buildTrackingCard(context);
+    }
+    return _buildBudgetedCard(context);
+  }
+
+  /// Accumulation View — tracking-only budget (no amount set).
+  Widget _buildTrackingCard(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final spentLabel = _currencyWhole.format(budget.spentAmount);
+
+    return Material(
+      color: scheme.surface,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(
+          color: scheme.outlineVariant.withValues(alpha: 0.55),
+        ),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Flexible(
+                              child: Text(
+                                _displayLabel(budget.name),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: theme.textTheme.titleMedium?.copyWith(
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            _TrackingBadge(),
+                          ],
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          _contextSubtitle(),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: scheme.onSurfaceVariant,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Icon(
+                    Icons.chevron_right_rounded,
+                    color: scheme.onSurfaceVariant.withValues(alpha: 0.55),
+                  ),
+                ],
+              ),
+              if (budget.categories.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                _CategoryRow(categories: budget.categories),
+              ],
+              const SizedBox(height: 20),
+              Text(
+                'Total spent',
+                style: theme.textTheme.labelLarge?.copyWith(
+                  color: scheme.onSurfaceVariant,
+                  letterSpacing: 0.2,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                spentLabel,
+                style: theme.textTheme.displaySmall?.copyWith(
+                  fontWeight: FontWeight.w700,
+                  height: 1.05,
+                  fontFeatures: const [FontFeature.tabularFigures()],
+                  color: scheme.onSurface,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Depletion View — budgeted (amount set).
+  Widget _buildBudgetedCard(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final barColor = budget.isOverBudget ? scheme.error : scheme.primary;
+    final remaining = budget.remainingAmount ?? 0;
+    final allocated = budget.allocatedAmount ?? 0;
     final remainingLabel = budget.isOverBudget
-        ? _currencyWhole.format(budget.remainingAmount.abs())
-        : _currencyWhole.format(budget.remainingAmount);
+        ? _currencyWhole.format(remaining.abs())
+        : _currencyWhole.format(remaining);
     final spentLabel = _currencyWhole.format(budget.spentAmount);
-    final allocatedLabel = _currencyWhole.format(budget.allocatedAmount);
+    final allocatedLabel = _currencyWhole.format(allocated);
 
     return Material(
       color: scheme.surface,
@@ -136,6 +238,31 @@ class BudgetProgressCard extends StatelessWidget {
               ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Small "Tracking" badge chip.
+class _TrackingBadge extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: scheme.tertiaryContainer.withValues(alpha: 0.55),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Text(
+        'Tracking',
+        style: theme.textTheme.labelSmall?.copyWith(
+          color: scheme.onTertiaryContainer,
+          fontWeight: FontWeight.w600,
+          letterSpacing: 0.3,
         ),
       ),
     );

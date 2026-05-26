@@ -9,8 +9,10 @@ import '../../auth/application/session_notifier.dart';
 import '../../expenses/application/categories_provider.dart';
 import '../../expenses/domain/expense_category.dart';
 import '../application/budget_providers.dart';
+import '../application/budget_types_provider.dart';
 import '../data/budgets_api.dart';
 import '../domain/budget_progress.dart';
+import '../domain/budget_type.dart';
 
 enum _BudgetResetType {
   dateFixed('date_fixed', 'Fixed dates'),
@@ -40,7 +42,8 @@ class _CreateBudgetSheetState extends ConsumerState<CreateBudgetSheet> {
   DateTime _manualStartDate = DateTime.now();
 
   _BudgetResetType _resetType = _BudgetResetType.dateFixed;
-  bool _rollover = true;
+  int? _selectedBudgetTypeId;
+  bool _rollover = false;
   bool _saving = false;
   String? _error;
 
@@ -80,8 +83,11 @@ class _CreateBudgetSheetState extends ConsumerState<CreateBudgetSheet> {
           .read(budgetsApiProvider)
           .createBudget(
             token: token,
+            budgetTypeId: _selectedBudgetTypeId!,
             name: _nameController.text.trim(),
-            amount: _amountController.text.trim(),
+            amount: _amountController.text.trim().isEmpty
+                ? null
+                : _amountController.text.trim(),
             resetType: _resetType.apiValue,
             resetDays: _resetType == _BudgetResetType.dateFixed
                 ? (_selectedResetDays.toList()..sort())
@@ -115,6 +121,7 @@ class _CreateBudgetSheetState extends ConsumerState<CreateBudgetSheet> {
 
   Set<int> get _assignedCategoryIds {
     return widget.existingBudgets
+        .where((budget) => budget.budgetTypeId == _selectedBudgetTypeId)
         .expand((budget) => budget.categories)
         .map((category) => category.id)
         .toSet();
@@ -141,106 +148,152 @@ class _CreateBudgetSheetState extends ConsumerState<CreateBudgetSheet> {
     final bottomInset = MediaQuery.viewInsetsOf(context).bottom;
     final safeBottom = MediaQuery.paddingOf(context).bottom;
     final categoriesAsync = ref.watch(expenseCategoriesProvider);
+    final budgetTypesAsync = ref.watch(budgetTypesProvider);
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
 
-    return SingleChildScrollView(
-      padding: EdgeInsets.fromLTRB(20, 4, 20, bottomInset + safeBottom + 20),
-      child: Form(
-        key: _formKey,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Text(
-              'Create budget',
-              style: theme.textTheme.headlineSmall?.copyWith(
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              'Track spending by pay period and carry unused funds forward.',
-              style: theme.textTheme.bodyMedium?.copyWith(
-                color: scheme.onSurfaceVariant,
-              ),
-            ),
-            const SizedBox(height: 20),
-            _BudgetDetailsSection(
-              saving: _saving,
-              nameController: _nameController,
-              amountController: _amountController,
-              resetType: _resetType,
-              selectedResetDays: _selectedResetDays,
-              manualStartDate: _manualStartDate,
-              rollover: _rollover,
-              fieldDecoration: _fieldDecoration,
-              onResetTypeChanged: (value) => setState(() {
-                _resetType = value;
-                _error = null;
-              }),
-              onResetDayChanged: (day, selected) => setState(() {
-                if (selected) {
-                  _selectedResetDays.add(day);
-                } else if (_selectedResetDays.length > 1) {
-                  _selectedResetDays.remove(day);
-                }
-                _error = null;
-              }),
-              onManualStartDateChanged: (value) => setState(() {
-                _manualStartDate = value;
-                _error = null;
-              }),
-              onRolloverChanged: (value) => setState(() => _rollover = value),
-            ),
-            const SizedBox(height: 16),
-            _BudgetCategoryField(
-              categoriesAsync: categoriesAsync,
-              selectedCategoryIds: _selectedCategoryIds,
-              disabledCategoryIds: _assignedCategoryIds,
-              enabled: !_saving,
-              onChanged: (categoryId, selected) {
-                setState(() {
-                  if (selected) {
-                    _selectedCategoryIds.add(categoryId);
-                  } else {
-                    _selectedCategoryIds.remove(categoryId);
-                  }
-                  _error = null;
-                });
-              },
-            ),
-            if (_error != null) ...[
-              const SizedBox(height: 16),
-              _FormErrorBanner(message: _error!),
-            ],
-            const SizedBox(height: 24),
-            FilledButton(
-              onPressed: _saving ? null : _save,
-              style: FilledButton.styleFrom(
-                minimumSize: const Size.fromHeight(52),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(14),
+    return budgetTypesAsync.when(
+      data: (types) {
+        if (_selectedBudgetTypeId == null && types.isNotEmpty) {
+          final defaultType = types.firstWhere((t) => t.code == 'budget', orElse: () => types.first);
+          _selectedBudgetTypeId = defaultType.id;
+          if (defaultType.code == 'budget') {
+            _rollover = true;
+          }
+        }
+
+        return SingleChildScrollView(
+          padding: EdgeInsets.fromLTRB(20, 4, 20, bottomInset + safeBottom + 20),
+          child: Form(
+            key: _formKey,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  'Create budget',
+                  style: theme.textTheme.headlineSmall?.copyWith(
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
-              ),
-              child: _saving
-                  ? const SizedBox(
-                      height: 22,
-                      width: 22,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: Colors.white,
-                      ),
-                    )
-                  : Text(
-                      'Create budget',
-                      style: theme.textTheme.titleSmall?.copyWith(
-                        color: scheme.onPrimary,
-                        fontWeight: FontWeight.w600,
-                      ),
+                const SizedBox(height: 4),
+                Text(
+                  'Track spending by pay period and carry unused funds forward.',
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: scheme.onSurfaceVariant,
+                  ),
+                ),
+                const SizedBox(height: 20),
+                _BudgetDetailsSection(
+                  saving: _saving,
+                  nameController: _nameController,
+                  amountController: _amountController,
+                  resetType: _resetType,
+                  selectedResetDays: _selectedResetDays,
+                  manualStartDate: _manualStartDate,
+                  rollover: _rollover,
+                  fieldDecoration: _fieldDecoration,
+                  budgetTypes: types,
+                  selectedBudgetTypeId: _selectedBudgetTypeId!,
+                  onBudgetTypeChanged: (value) {
+                    setState(() {
+                      _selectedBudgetTypeId = value;
+                      final type = types.firstWhere((t) => t.id == value);
+                      if (type.code == 'budget') {
+                        _rollover = true;
+                      } else if (type.code == 'tracking') {
+                        _amountController.clear();
+                        _rollover = false;
+                      }
+                      final disabledIds = _assignedCategoryIds;
+                      _selectedCategoryIds.removeWhere((id) => disabledIds.contains(id));
+                      _error = null;
+                    });
+                  },
+                  onResetTypeChanged: (value) => setState(() {
+                    _resetType = value;
+                    _error = null;
+                  }),
+                  onResetDayChanged: (day, selected) => setState(() {
+                    if (selected) {
+                      _selectedResetDays.add(day);
+                    } else if (_selectedResetDays.length > 1) {
+                      _selectedResetDays.remove(day);
+                    }
+                    _error = null;
+                  }),
+                  onManualStartDateChanged: (value) => setState(() {
+                    _manualStartDate = value;
+                    _error = null;
+                  }),
+                  onRolloverChanged: (value) => setState(() => _rollover = value),
+                ),
+                const SizedBox(height: 16),
+                _BudgetCategoryField(
+                  categoriesAsync: categoriesAsync,
+                  selectedCategoryIds: _selectedCategoryIds,
+                  disabledCategoryIds: _assignedCategoryIds,
+                  enabled: !_saving,
+                  onChanged: (categoryId, selected) {
+                    setState(() {
+                      if (selected) {
+                        _selectedCategoryIds.add(categoryId);
+                      } else {
+                        _selectedCategoryIds.remove(categoryId);
+                      }
+                      _error = null;
+                    });
+                  },
+                ),
+                if (_error != null) ...[
+                  const SizedBox(height: 16),
+                  _FormErrorBanner(message: _error!),
+                ],
+                const SizedBox(height: 24),
+                FilledButton(
+                  onPressed: _saving ? null : _save,
+                  style: FilledButton.styleFrom(
+                    minimumSize: const Size.fromHeight(52),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
                     ),
+                  ),
+                  child: _saving
+                      ? const SizedBox(
+                          height: 22,
+                          width: 22,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                      : Text(
+                          'Create budget',
+                          style: theme.textTheme.titleSmall?.copyWith(
+                            color: scheme.onPrimary,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                ),
+              ],
             ),
-          ],
+          ),
+        );
+      },
+      loading: () => const SizedBox(
+        height: 250,
+        child: Center(child: CircularProgressIndicator()),
+      ),
+      error: (error, stack) => SizedBox(
+        height: 250,
+        child: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Text(
+              'Error loading budget types: $error',
+              textAlign: TextAlign.center,
+            ),
+          ),
         ),
       ),
     );
@@ -278,7 +331,7 @@ class _EditBudgetCategoriesSheetState
 
   Set<int> get _assignedCategoryIds {
     return widget.existingBudgets
-        .where((budget) => budget.id != widget.budget.id)
+        .where((budget) => budget.id != widget.budget.id && budget.budgetTypeId == widget.budget.budgetTypeId)
         .expand((budget) => budget.categories)
         .map((category) => category.id)
         .toSet();
@@ -427,6 +480,9 @@ class _BudgetDetailsSection extends StatelessWidget {
     required this.onResetDayChanged,
     required this.onManualStartDateChanged,
     required this.onRolloverChanged,
+    required this.budgetTypes,
+    required this.selectedBudgetTypeId,
+    required this.onBudgetTypeChanged,
   });
 
   final bool saving;
@@ -446,11 +502,17 @@ class _BudgetDetailsSection extends StatelessWidget {
   final void Function(int day, bool selected) onResetDayChanged;
   final ValueChanged<DateTime> onManualStartDateChanged;
   final ValueChanged<bool> onRolloverChanged;
+  final List<BudgetType> budgetTypes;
+  final int selectedBudgetTypeId;
+  final ValueChanged<int> onBudgetTypeChanged;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
+
+    final selectedType = budgetTypes.firstWhere((t) => t.id == selectedBudgetTypeId, orElse: () => budgetTypes.first);
+    final isTracking = selectedType.code == 'tracking';
 
     return Material(
       color: scheme.surfaceContainerLow.withValues(alpha: 0.5),
@@ -460,6 +522,27 @@ class _BudgetDetailsSection extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            DropdownButtonFormField<int>(
+              initialValue: selectedBudgetTypeId,
+              decoration: fieldDecoration(context, label: 'Budget type'),
+              items: budgetTypes
+                  .map(
+                    (option) => DropdownMenuItem(
+                      value: option.id,
+                      child: Text(option.name),
+                    ),
+                  )
+                  .toList(),
+              onChanged: saving
+                  ? null
+                  : (value) {
+                      if (value == null) {
+                        return;
+                      }
+                      onBudgetTypeChanged(value);
+                    },
+            ),
+            const SizedBox(height: 12),
             TextFormField(
               controller: nameController,
               enabled: !saving,
@@ -477,29 +560,35 @@ class _BudgetDetailsSection extends StatelessWidget {
                 return null;
               },
             ),
-            const SizedBox(height: 12),
-            TextFormField(
-              controller: amountController,
-              enabled: !saving,
-              decoration: fieldDecoration(
-                context,
-                label: 'Base amount',
-                hint: '5000',
+            if (!isTracking) ...[
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: amountController,
+                enabled: !saving,
+                decoration: fieldDecoration(
+                  context,
+                  label: 'Base amount',
+                  hint: '5000',
+                ),
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
+                ),
+                inputFormatters: [
+                  FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d{0,2}')),
+                ],
+                validator: (value) {
+                  final text = (value ?? '').trim();
+                  if (text.isEmpty) {
+                    return 'Enter a budget amount.';
+                  }
+                  final amount = double.tryParse(text);
+                  if (amount == null || amount <= 0) {
+                    return 'Enter an amount greater than 0.';
+                  }
+                  return null;
+                },
               ),
-              keyboardType: const TextInputType.numberWithOptions(
-                decimal: true,
-              ),
-              inputFormatters: [
-                FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d{0,2}')),
-              ],
-              validator: (value) {
-                final amount = double.tryParse((value ?? '').trim());
-                if (amount == null || amount <= 0) {
-                  return 'Enter an amount greater than 0.';
-                }
-                return null;
-              },
-            ),
+            ],
             const SizedBox(height: 12),
             DropdownButtonFormField<_BudgetResetType>(
               initialValue: resetType,
@@ -537,26 +626,28 @@ class _BudgetDetailsSection extends StatelessWidget {
                 onChanged: onManualStartDateChanged,
               ),
             ],
-            const SizedBox(height: 4),
-            Material(
-              color: scheme.surface,
-              borderRadius: BorderRadius.circular(12),
-              child: SwitchListTile(
-                contentPadding: const EdgeInsets.symmetric(horizontal: 12),
-                title: Text(
-                  'Enable rollover',
-                  style: theme.textTheme.titleSmall,
-                ),
-                subtitle: Text(
-                  'Unused funds move into the next period.',
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: scheme.onSurfaceVariant,
+            if (!isTracking) ...[
+              const SizedBox(height: 4),
+              Material(
+                color: scheme.surface,
+                borderRadius: BorderRadius.circular(12),
+                child: SwitchListTile(
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 12),
+                  title: Text(
+                    'Enable rollover',
+                    style: theme.textTheme.titleSmall,
                   ),
+                  subtitle: Text(
+                    'Unused funds move into the next period.',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: scheme.onSurfaceVariant,
+                    ),
+                  ),
+                  value: rollover,
+                  onChanged: saving ? null : onRolloverChanged,
                 ),
-                value: rollover,
-                onChanged: saving ? null : onRolloverChanged,
               ),
-            ),
+            ],
           ],
         ),
       ),

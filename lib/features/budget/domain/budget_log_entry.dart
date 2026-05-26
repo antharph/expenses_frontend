@@ -11,23 +11,33 @@ class BudgetLogEntry {
   final int id;
   final DateTime startDate;
   final DateTime? endDate;
-  final double allocatedAmount;
+  final double? allocatedAmount;
   final double spentAmount;
-  final double rolloverAmount;
+  final double? rolloverAmount;
+
+  /// True when this log entry is for a tracking-only budget (no limit set).
+  bool get isTrackingOnly => allocatedAmount == null;
 
   factory BudgetLogEntry.fromJson(Map<String, dynamic> json) {
     return BudgetLogEntry(
       id: json['id'] as int,
       startDate: _parseDate(json['start_date']) ?? DateTime.now(),
       endDate: _parseDate(json['end_date']),
-      allocatedAmount: _parseAmount(json['allocated_amount']),
+      allocatedAmount: _parseNullableAmount(json['allocated_amount']),
       spentAmount: _parseAmount(json['spent_amount']),
-      rolloverAmount: _parseAmount(json['rollover_amount']),
+      rolloverAmount: _parseNullableAmount(json['rollover_amount']),
     );
   }
 
   static double _parseAmount(Object? raw) =>
       double.tryParse(raw?.toString() ?? '') ?? 0;
+
+  static double? _parseNullableAmount(Object? raw) {
+    if (raw == null) {
+      return null;
+    }
+    return double.tryParse(raw.toString());
+  }
 
   static DateTime? _parseDate(Object? raw) {
     if (raw == null) {

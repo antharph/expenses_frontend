@@ -153,7 +153,8 @@ class BudgetsScreen extends ConsumerWidget {
   }
 }
 
-/// Screen-level hero — total remaining across active budgets.
+/// Screen-level hero — total remaining across budgeted budgets, total spent
+/// across tracking-only budgets.
 class _BudgetsSummaryHeader extends StatelessWidget {
   const _BudgetsSummaryHeader({required this.budgets});
 
@@ -169,38 +170,101 @@ class _BudgetsSummaryHeader extends StatelessWidget {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
 
-    final totalRemaining = budgets.fold<double>(
+    final budgeted = budgets.where((b) => !b.isTrackingOnly).toList();
+    final trackingOnly = budgets.where((b) => b.isTrackingOnly).toList();
+
+    final totalRemaining = budgeted.fold<double>(
       0,
-      (sum, budget) => sum + budget.remainingAmount,
+      (sum, budget) => sum + (budget.remainingAmount ?? 0),
     );
-    final overCount = budgets.where((b) => b.isOverBudget).length;
-    final budgetLabel = budgets.length == 1
+    final totalTrackedSpent = trackingOnly.fold<double>(
+      0,
+      (sum, budget) => sum + budget.spentAmount,
+    );
+    final overCount = budgeted.where((b) => b.isOverBudget).length;
+    final budgetedLabel = budgeted.length == 1
         ? '1 budget'
-        : '${budgets.length} budgets';
+        : '${budgeted.length} budgets';
+    final trackingLabel = trackingOnly.length == 1
+        ? '1 tracking'
+        : '${trackingOnly.length} tracking';
+
+    final subtitleParts = <String>[];
+    if (budgeted.isNotEmpty) {
+      subtitleParts.add(budgetedLabel);
+    }
+    if (trackingOnly.isNotEmpty) {
+      subtitleParts.add(trackingLabel);
+    }
+    if (overCount > 0) {
+      subtitleParts.add('$overCount over limit');
+    }
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          'Total remaining',
-          style: theme.textTheme.labelLarge?.copyWith(
-            color: scheme.onSurfaceVariant,
-            letterSpacing: 0.2,
-          ),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (budgeted.isNotEmpty)
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Total remaining',
+                      style: theme.textTheme.labelLarge?.copyWith(
+                        color: scheme.onSurfaceVariant,
+                        letterSpacing: 0.2,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      _amountFormat.format(totalRemaining),
+                      style: theme.textTheme.displaySmall?.copyWith(
+                        fontWeight: FontWeight.w700,
+                        height: 1.1,
+                        fontFeatures: const [FontFeature.tabularFigures()],
+                        color: totalRemaining < 0
+                            ? scheme.error
+                            : scheme.onSurface,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            if (trackingOnly.isNotEmpty)
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: budgeted.isNotEmpty
+                      ? CrossAxisAlignment.end
+                      : CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Total spent',
+                      style: theme.textTheme.labelLarge?.copyWith(
+                        color: scheme.onSurfaceVariant,
+                        letterSpacing: 0.2,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      _amountFormat.format(totalTrackedSpent),
+                      style: theme.textTheme.displaySmall?.copyWith(
+                        fontWeight: FontWeight.w700,
+                        height: 1.1,
+                        fontFeatures: const [FontFeature.tabularFigures()],
+                        color: scheme.onSurface,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+          ],
         ),
         const SizedBox(height: 4),
         Text(
-          _amountFormat.format(totalRemaining),
-          style: theme.textTheme.displaySmall?.copyWith(
-            fontWeight: FontWeight.w700,
-            height: 1.1,
-            fontFeatures: const [FontFeature.tabularFigures()],
-            color: totalRemaining < 0 ? scheme.error : scheme.onSurface,
-          ),
-        ),
-        const SizedBox(height: 4),
-        Text(
-          overCount > 0 ? '$budgetLabel · $overCount over limit' : budgetLabel,
+          subtitleParts.join(' · '),
           style: theme.textTheme.bodyMedium?.copyWith(
             color: scheme.onSurfaceVariant,
           ),

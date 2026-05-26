@@ -377,12 +377,14 @@ class _CurrentPeriodCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
-    final remaining = entry.allocatedAmount - entry.spentAmount;
-    final isOver = remaining < 0;
+    final isTrackingOnly = entry.isTrackingOnly;
+    final allocated = entry.allocatedAmount ?? 0;
+    final remaining = allocated - entry.spentAmount;
+    final isOver = !isTrackingOnly && remaining < 0;
     final barColor = isOver ? scheme.error : scheme.primary;
-    final progressFraction = entry.allocatedAmount <= 0
+    final progressFraction = isTrackingOnly || allocated <= 0
         ? 0.0
-        : (remaining / entry.allocatedAmount).clamp(0.0, 1.0);
+        : (remaining / allocated).clamp(0.0, 1.0);
 
     return Material(
       color: scheme.surface,
@@ -411,7 +413,11 @@ class _CurrentPeriodCard extends StatelessWidget {
             ),
             const SizedBox(height: 20),
             Text(
-              isOver ? 'Over by' : 'Remaining',
+              isTrackingOnly
+                  ? 'Total spent'
+                  : isOver
+                      ? 'Over by'
+                      : 'Remaining',
               style: theme.textTheme.labelLarge?.copyWith(
                 color: scheme.onSurfaceVariant,
                 letterSpacing: 0.2,
@@ -419,7 +425,9 @@ class _CurrentPeriodCard extends StatelessWidget {
             ),
             const SizedBox(height: 2),
             Text(
-              formatAmount(isOver ? remaining.abs() : remaining),
+              isTrackingOnly
+                  ? formatAmount(entry.spentAmount)
+                  : formatAmount(isOver ? remaining.abs() : remaining),
               style: theme.textTheme.displaySmall?.copyWith(
                 fontWeight: FontWeight.w700,
                 height: 1.05,
@@ -427,24 +435,26 @@ class _CurrentPeriodCard extends StatelessWidget {
                 color: isOver ? scheme.error : scheme.onSurface,
               ),
             ),
-            const SizedBox(height: 16),
-            ClipRRect(
-              borderRadius: BorderRadius.circular(6),
-              child: LinearProgressIndicator(
-                value: progressFraction,
-                minHeight: 8,
-                backgroundColor: scheme.outlineVariant.withValues(alpha: 0.3),
-                color: barColor,
+            if (!isTrackingOnly) ...[
+              const SizedBox(height: 16),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(6),
+                child: LinearProgressIndicator(
+                  value: progressFraction,
+                  minHeight: 8,
+                  backgroundColor: scheme.outlineVariant.withValues(alpha: 0.3),
+                  color: barColor,
+                ),
               ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              '${formatAmount(entry.spentAmount)} spent of ${formatAmount(entry.allocatedAmount)}',
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: scheme.onSurfaceVariant,
-                fontFeatures: const [FontFeature.tabularFigures()],
+              const SizedBox(height: 8),
+              Text(
+                '${formatAmount(entry.spentAmount)} spent of ${formatAmount(allocated)}',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: scheme.onSurfaceVariant,
+                  fontFeatures: const [FontFeature.tabularFigures()],
+                ),
               ),
-            ),
+            ],
           ],
         ),
       ),
@@ -468,6 +478,11 @@ class _PastPeriodRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
+    final isTrackingOnly = entry.isTrackingOnly;
+
+    final subtitle = isTrackingOnly
+        ? '${formatAmount(entry.spentAmount)} spent'
+        : '${formatAmount(entry.spentAmount)} spent · ${formatAmount(entry.rolloverAmount ?? 0)} rolled over';
 
     return Material(
       color: scheme.surfaceContainerLow.withValues(alpha: 0.45),
@@ -488,7 +503,7 @@ class _PastPeriodRow extends StatelessWidget {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    '${formatAmount(entry.spentAmount)} spent · ${formatAmount(entry.rolloverAmount)} rolled over',
+                    subtitle,
                     style: theme.textTheme.bodySmall?.copyWith(
                       color: scheme.onSurfaceVariant,
                       fontFeatures: const [FontFeature.tabularFigures()],
@@ -497,14 +512,15 @@ class _PastPeriodRow extends StatelessWidget {
                 ],
               ),
             ),
-            Text(
-              formatAmount(entry.allocatedAmount),
-              style: theme.textTheme.titleSmall?.copyWith(
-                fontWeight: FontWeight.w600,
-                fontFeatures: const [FontFeature.tabularFigures()],
-                color: scheme.onSurfaceVariant,
+            if (!isTrackingOnly)
+              Text(
+                formatAmount(entry.allocatedAmount ?? 0),
+                style: theme.textTheme.titleSmall?.copyWith(
+                  fontWeight: FontWeight.w600,
+                  fontFeatures: const [FontFeature.tabularFigures()],
+                  color: scheme.onSurfaceVariant,
+                ),
               ),
-            ),
           ],
         ),
       ),
