@@ -156,7 +156,7 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
                         const SizedBox(width: 12),
                         Expanded(
                           child: Text(
-                            'You signed in with Google. Password is managed by Google.',
+                            session.authProvider.socialSignInMessage,
                             style: theme.textTheme.bodyMedium?.copyWith(
                               color: scheme.onSurfaceVariant,
                             ),

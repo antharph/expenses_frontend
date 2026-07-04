@@ -56,6 +56,18 @@ class AuthApi {
     return response.data ?? <String, dynamic>{};
   }
 
+  Future<Map<String, dynamic>> loginWithFirebase({
+    required String idToken,
+    required String timezone,
+  }) async {
+    final client = _client(null);
+    final response = await client.post<Map<String, dynamic>>(
+      '/api/v1/auth/firebase',
+      data: {'id_token': idToken, 'timezone': timezone},
+    );
+    return response.data ?? <String, dynamic>{};
+  }
+
   Future<Map<String, dynamic>> loginWithGoogle({
     required String idToken,
     required String timezone,

@@ -8,6 +8,7 @@ import '../../../core/errors/api_errors.dart';
 import '../../../core/timezone/device_timezone.dart';
 import '../../budget/data/budgets_api.dart';
 import '../data/auth_api.dart';
+import '../domain/auth_provider.dart';
 import 'user_session.dart';
 
 final authApiProvider = Provider<AuthApi>((ref) => AuthApi());
@@ -21,6 +22,7 @@ class SessionNotifier extends AsyncNotifier<UserSession?> {
   static const _nameKey = 'auth_user_name';
   static const _emailKey = 'auth_user_email';
   static const _passwordAuthEnabledKey = 'auth_password_auth_enabled';
+  static const _authProviderKey = 'auth_provider';
 
   AuthApi get _api => ref.read(authApiProvider);
 
@@ -46,6 +48,12 @@ class SessionNotifier extends AsyncNotifier<UserSession?> {
         passwordAuthEnabled: _parsePasswordAuthEnabled(
           user['password_auth_enabled'],
           prefs.getBool(_passwordAuthEnabledKey),
+        ),
+        authProvider: _parseAuthProvider(
+          user['auth_provider'],
+          prefs.getString(_authProviderKey) != null
+              ? UserAuthProvider.fromApiValue(prefs.getString(_authProviderKey))
+              : null,
         ),
       );
       await _persistUserFields(prefs, session);
@@ -141,7 +149,7 @@ class SessionNotifier extends AsyncNotifier<UserSession?> {
       }
 
       final timezone = await deviceTimezone();
-      final data = await _api.loginWithGoogle(
+      final data = await _api.loginWithFirebase(
         idToken: idToken,
         timezone: timezone,
       );
@@ -181,6 +189,12 @@ class SessionNotifier extends AsyncNotifier<UserSession?> {
                 current.passwordAuthEnabled,
               )
             : current.passwordAuthEnabled,
+        authProvider: user != null
+            ? _parseAuthProvider(
+                user['auth_provider'],
+                current.authProvider,
+              )
+            : current.authProvider,
       );
       final prefs = await SharedPreferences.getInstance();
       await _persistUserFields(prefs, updated);
@@ -213,6 +227,10 @@ class SessionNotifier extends AsyncNotifier<UserSession?> {
         passwordAuthEnabled: _parsePasswordAuthEnabled(
           user['password_auth_enabled'],
           current.passwordAuthEnabled,
+        ),
+        authProvider: _parseAuthProvider(
+          user['auth_provider'],
+          current.authProvider,
         ),
       );
       final prefs = await SharedPreferences.getInstance();
@@ -288,6 +306,7 @@ class SessionNotifier extends AsyncNotifier<UserSession?> {
         user['password_auth_enabled'],
         null,
       ),
+      authProvider: _parseAuthProvider(user['auth_provider'], null),
     );
 
     final prefs = await SharedPreferences.getInstance();
@@ -315,6 +334,14 @@ class SessionNotifier extends AsyncNotifier<UserSession?> {
     await prefs.setString(_nameKey, session.name);
     await prefs.setString(_emailKey, session.email);
     await prefs.setBool(_passwordAuthEnabledKey, session.passwordAuthEnabled);
+    await prefs.setString(_authProviderKey, session.authProvider.name);
+  }
+
+  UserAuthProvider _parseAuthProvider(Object? apiValue, UserAuthProvider? cached) {
+    if (apiValue != null) {
+      return UserAuthProvider.fromApiValue(apiValue);
+    }
+    return cached ?? UserAuthProvider.email;
   }
 
   bool _parsePasswordAuthEnabled(Object? apiValue, bool? cached) {
@@ -341,5 +368,6 @@ class SessionNotifier extends AsyncNotifier<UserSession?> {
     await prefs.remove(_nameKey);
     await prefs.remove(_emailKey);
     await prefs.remove(_passwordAuthEnabledKey);
+    await prefs.remove(_authProviderKey);
   }
 }
