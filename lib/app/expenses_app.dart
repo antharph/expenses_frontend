@@ -16,6 +16,7 @@ class ExpensesApp extends ConsumerWidget {
     final page = ref.watch(authPageProvider);
 
     return MaterialApp(
+      // debugShowCheckedModeBanner: false,
       title: 'Expenses',
       theme: ThemeData(
         useMaterial3: true,
