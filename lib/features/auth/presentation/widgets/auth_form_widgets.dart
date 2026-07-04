@@ -9,6 +9,8 @@ InputDecoration authFieldDecoration(
   BuildContext context, {
   required String label,
   String? hint,
+  String? helperText,
+  int? helperMaxLines,
   Widget? prefixIcon,
   Widget? suffixIcon,
 }) {
@@ -17,6 +19,13 @@ InputDecoration authFieldDecoration(
   return InputDecoration(
     labelText: label,
     hintText: hint,
+    helperText: helperText,
+    helperMaxLines: helperMaxLines,
+    helperStyle: helperText != null
+        ? Theme.of(context).textTheme.bodySmall?.copyWith(
+              color: scheme.onSurfaceVariant,
+            )
+        : null,
     prefixIcon: prefixIcon,
     suffixIcon: suffixIcon,
     filled: true,
@@ -168,12 +177,14 @@ class AuthPasswordField extends StatefulWidget {
     required this.controller,
     required this.label,
     this.autofillHints,
+    this.helperText,
     this.validator,
   });
 
   final TextEditingController controller;
   final String label;
   final Iterable<String>? autofillHints;
+  final String? helperText;
   final FormFieldValidator<String>? validator;
 
   @override
@@ -194,6 +205,7 @@ class _AuthPasswordFieldState extends State<AuthPasswordField> {
       decoration: authFieldDecoration(
         context,
         label: widget.label,
+        helperText: widget.helperText,
         prefixIcon: Icon(Icons.lock_outline_rounded, color: scheme.onSurfaceVariant),
         suffixIcon: IconButton(
           tooltip: _obscure ? 'Show password' : 'Hide password',

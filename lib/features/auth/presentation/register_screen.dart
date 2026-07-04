@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../application/auth_page.dart';
 import '../application/session_notifier.dart';
+import '../domain/password_rules.dart';
 import 'widgets/auth_form_widgets.dart';
 
 class RegisterScreen extends ConsumerStatefulWidget {
@@ -133,15 +134,8 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                     controller: _password,
                     label: 'Password',
                     autofillHints: const [AutofillHints.newPassword],
-                    validator: (value) {
-                      if (value == null || value.isEmpty) {
-                        return 'Enter a password';
-                      }
-                      if (value.length < 8) {
-                        return 'Use at least 8 characters';
-                      }
-                      return null;
-                    },
+                    helperText: passwordMinLengthHint(),
+                    validator: validatePasswordMinLength,
                   ),
                   const SizedBox(height: 12),
                   AuthPasswordField(

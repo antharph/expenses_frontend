@@ -65,6 +65,13 @@ VS Code launch configs in `.vscode/launch.json` use the same pattern for Dev and
 
 If `API_URL` is missing, the app throws at startup—see the error message in `apiBaseUrl()`.
 
+
+Build for TestFlight
+1. Increment version: 1.0.0+8 in pubspec.yml
+2. flutter build ipa  --dart-define-from-file=.config/config_prod.json
+3. Open Transportor and upload build/ios/ipa/MaiExpenses.ipa
+
+
 ---
 
 ## Related files
