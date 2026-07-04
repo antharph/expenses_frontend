@@ -131,11 +131,31 @@ class _CreateBudgetSheetState extends ConsumerState<CreateBudgetSheet> {
     BuildContext context, {
     required String label,
     String? hint,
+    bool required = false,
   }) {
-    final scheme = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final labelStyle =
+        theme.inputDecorationTheme.labelStyle ??
+        theme.textTheme.bodyLarge?.copyWith(color: scheme.onSurfaceVariant);
 
     return InputDecoration(
-      labelText: label,
+      label: required
+          ? Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(label, style: labelStyle),
+                Text(
+                  ' *',
+                  style: labelStyle?.copyWith(
+                    color: scheme.error,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            )
+          : null,
+      labelText: required ? null : label,
       hintText: hint,
       filled: true,
       fillColor: scheme.surface,
@@ -496,6 +516,7 @@ class _BudgetDetailsSection extends StatelessWidget {
     BuildContext, {
     required String label,
     String? hint,
+    bool required,
   })
   fieldDecoration;
   final ValueChanged<_BudgetResetType> onResetTypeChanged;
@@ -551,6 +572,7 @@ class _BudgetDetailsSection extends StatelessWidget {
                 context,
                 label: 'Budget name',
                 hint: 'Home food',
+                required: true,
               ),
               textInputAction: TextInputAction.next,
               validator: (value) {
@@ -569,6 +591,7 @@ class _BudgetDetailsSection extends StatelessWidget {
                   context,
                   label: 'Base amount',
                   hint: '5000',
+                  required: true,
                 ),
                 keyboardType: const TextInputType.numberWithOptions(
                   decimal: true,
@@ -680,11 +703,22 @@ class _ResetDayPicker extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              'Reset days',
-              style: theme.textTheme.titleSmall?.copyWith(
-                fontWeight: FontWeight.w600,
-              ),
+            Row(
+              children: [
+                Text(
+                  'Reset days',
+                  style: theme.textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                Text(
+                  ' *',
+                  style: theme.textTheme.titleSmall?.copyWith(
+                    color: scheme.error,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
             ),
             const SizedBox(height: 4),
             Text(
@@ -827,11 +861,22 @@ class _BudgetCategoryField extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          'Categories',
-          style: theme.textTheme.titleSmall?.copyWith(
-            fontWeight: FontWeight.w600,
-          ),
+        Row(
+          children: [
+            Text(
+              'Categories',
+              style: theme.textTheme.titleSmall?.copyWith(
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            Text(
+              ' *',
+              style: theme.textTheme.titleSmall?.copyWith(
+                color: scheme.error,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
         ),
         const SizedBox(height: 4),
         Text(

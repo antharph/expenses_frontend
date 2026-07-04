@@ -284,29 +284,49 @@ class _AddExpenseSheetState extends ConsumerState<AddExpenseSheet> {
     final showCategoryError =
         _categoryTouched && resolvedCategoryId == null && !categoriesAsync.isLoading;
 
-    return SingleChildScrollView(
-      padding: EdgeInsets.fromLTRB(20, 4, 20, bottomInset + safeBottom + 20),
-      child: Form(
-        key: _formKey,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Text(
-              'New expense',
-              style: theme.textTheme.headlineSmall?.copyWith(
-                fontWeight: FontWeight.w700,
+    return PopScope(
+      canPop: !_saving,
+      child: SingleChildScrollView(
+        keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+        padding: EdgeInsets.fromLTRB(20, 4, 20, bottomInset + safeBottom + 20),
+        child: Form(
+          key: _formKey,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'New expense',
+                          style: theme.textTheme.headlineSmall?.copyWith(
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          _entryMode == _ExpenseEntryMode.receipt
+                              ? 'Upload a receipt or enter details manually.'
+                              : 'Enter item details below.',
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            color: scheme.onSurfaceVariant,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  IconButton(
+                    tooltip: 'Close',
+                    onPressed: _saving ? null : () => Navigator.of(context).pop(),
+                    icon: const Icon(Icons.close),
+                  ),
+                ],
               ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              _entryMode == _ExpenseEntryMode.receipt
-                  ? 'Upload a receipt or enter details manually.'
-                  : 'Enter item details below.',
-              style: theme.textTheme.bodyMedium?.copyWith(
-                color: scheme.onSurfaceVariant,
-              ),
-            ),
             const SizedBox(height: 20),
             SegmentedButton<_ExpenseEntryMode>(
               style: SegmentedButton.styleFrom(
@@ -411,8 +431,17 @@ class _AddExpenseSheetState extends ConsumerState<AddExpenseSheet> {
                       ),
                     ),
             ),
+            const SizedBox(height: 8),
+            TextButton(
+              onPressed: _saving ? null : () => Navigator.of(context).pop(),
+              style: TextButton.styleFrom(
+                minimumSize: const Size.fromHeight(48),
+              ),
+              child: const Text('Cancel'),
+            ),
           ],
         ),
+      ),
       ),
     );
   }
@@ -530,22 +559,19 @@ class _AddExpenseCategoryField extends StatelessWidget {
                       ],
                     ),
                   ),
-                SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: Row(
-                    children: [
-                      for (var i = 0; i < ordered.length; i++) ...[
-                        if (i > 0) const SizedBox(width: 8),
-                        _CategoryChoiceChip(
-                          label: ordered[i].name,
-                          selected: selectedCategoryId == ordered[i].id,
-                          accent: _categoryAccent(scheme, ordered[i].name),
-                          enabled: enabled,
-                          onTap: () => onChanged(ordered[i].id),
-                        ),
-                      ],
-                    ],
-                  ),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    for (final category in ordered)
+                      _CategoryChoiceChip(
+                        label: category.name,
+                        selected: selectedCategoryId == category.id,
+                        accent: _categoryAccent(scheme, category.name),
+                        enabled: enabled,
+                        onTap: () => onChanged(category.id),
+                      ),
+                  ],
                 ),
               ],
             );
@@ -763,6 +789,41 @@ class _ReceiptUploadSection extends StatelessWidget {
   }
 }
 
+InputDecoration _manualFieldDecoration(
+  BuildContext context, {
+  required String label,
+  bool required = false,
+  Color? fillColor,
+}) {
+  final theme = Theme.of(context);
+  final scheme = theme.colorScheme;
+  final labelStyle =
+      theme.inputDecorationTheme.labelStyle ??
+      theme.textTheme.bodyLarge?.copyWith(color: scheme.onSurfaceVariant);
+
+  return InputDecoration(
+    label: required
+        ? Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(label, style: labelStyle),
+              Text(
+                ' *',
+                style: labelStyle?.copyWith(
+                  color: scheme.error,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          )
+        : null,
+    labelText: required ? null : label,
+    filled: true,
+    fillColor: fillColor ?? scheme.surface,
+    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+  );
+}
+
 class _ManualEntryFields extends StatelessWidget {
   const _ManualEntryFields({
     required this.itemController,
@@ -792,13 +853,10 @@ class _ManualEntryFields extends StatelessWidget {
               controller: itemController,
               textInputAction: TextInputAction.next,
               textCapitalization: TextCapitalization.sentences,
-              decoration: InputDecoration(
-                labelText: 'Item',
-                filled: true,
-                fillColor: scheme.surface,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
+              decoration: _manualFieldDecoration(
+                context,
+                label: 'Item',
+                required: true,
               ),
               validator: (v) {
                 if (v == null || v.trim().isEmpty) {
@@ -820,13 +878,10 @@ class _ManualEntryFields extends StatelessWidget {
                       _MinQuantityInputFormatter(),
                     ],
                     textInputAction: TextInputAction.next,
-                    decoration: InputDecoration(
-                      labelText: 'Qty',
-                      filled: true,
-                      fillColor: scheme.surface,
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
+                    decoration: _manualFieldDecoration(
+                      context,
+                      label: 'Qty',
+                      required: true,
                     ),
                     validator: (v) {
                       final n = int.tryParse(v?.trim() ?? '');
@@ -846,13 +901,10 @@ class _ManualEntryFields extends StatelessWidget {
                       decimal: true,
                     ),
                     textInputAction: TextInputAction.done,
-                    decoration: InputDecoration(
-                      labelText: 'Unit price',
-                      filled: true,
-                      fillColor: scheme.surface,
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
+                    decoration: _manualFieldDecoration(
+                      context,
+                      label: 'Unit price',
+                      required: true,
                     ),
                     validator: (v) {
                       if (v == null || v.trim().isEmpty) {
@@ -873,14 +925,11 @@ class _ManualEntryFields extends StatelessWidget {
               controller: totalController,
               readOnly: true,
               enableInteractiveSelection: false,
-              decoration: InputDecoration(
-                labelText: 'Total',
-                filled: true,
+              decoration: _manualFieldDecoration(
+                context,
+                label: 'Total',
                 fillColor: scheme.surfaceContainerHighest.withValues(
                   alpha: 0.35,
-                ),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
                 ),
               ),
               style: Theme.of(context).textTheme.titleMedium?.copyWith(
