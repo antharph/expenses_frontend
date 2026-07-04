@@ -80,4 +80,33 @@ class AuthApi {
     final client = _client(token);
     await client.post<void>('/api/v1/logout');
   }
+
+  Future<Map<String, dynamic>> updateProfile({
+    required String token,
+    required String name,
+  }) async {
+    final client = _client(token);
+    final response = await client.patch<Map<String, dynamic>>(
+      '/api/v1/user/profile',
+      data: {'name': name},
+    );
+    return response.data ?? <String, dynamic>{};
+  }
+
+  Future<void> updatePassword({
+    required String token,
+    required String currentPassword,
+    required String password,
+    required String passwordConfirmation,
+  }) async {
+    final client = _client(token);
+    await client.put<void>(
+      '/api/v1/user/password',
+      data: {
+        'current_password': currentPassword,
+        'password': password,
+        'password_confirmation': passwordConfirmation,
+      },
+    );
+  }
 }

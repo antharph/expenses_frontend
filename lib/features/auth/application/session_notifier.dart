@@ -20,6 +20,7 @@ class SessionNotifier extends AsyncNotifier<UserSession?> {
   static const _tokenKey = 'auth_token';
   static const _nameKey = 'auth_user_name';
   static const _emailKey = 'auth_user_email';
+  static const _passwordAuthEnabledKey = 'auth_password_auth_enabled';
 
   AuthApi get _api => ref.read(authApiProvider);
 
@@ -42,6 +43,10 @@ class SessionNotifier extends AsyncNotifier<UserSession?> {
         token: token,
         name: user['name'] as String? ?? prefs.getString(_nameKey) ?? '',
         email: user['email'] as String? ?? prefs.getString(_emailKey) ?? '',
+        passwordAuthEnabled: _parsePasswordAuthEnabled(
+          user['password_auth_enabled'],
+          prefs.getBool(_passwordAuthEnabledKey),
+        ),
       );
       await _persistUserFields(prefs, session);
       await _syncBudgetCycles(session);
@@ -153,6 +158,101 @@ class SessionNotifier extends AsyncNotifier<UserSession?> {
     }
   }
 
+  /// Returns `null` on success, or a user-facing error message.
+  Future<String?> updateName({required String name}) async {
+    final current = state.valueOrNull;
+    if (current == null) {
+      return 'Not signed in.';
+    }
+
+    final trimmed = name.trim();
+    if (trimmed.isEmpty) {
+      return 'Enter your name.';
+    }
+
+    try {
+      final data = await _api.updateProfile(token: current.token, name: trimmed);
+      final user = data['user'] as Map<String, dynamic>?;
+      final updated = current.copyWith(
+        name: user?['name'] as String? ?? trimmed,
+        passwordAuthEnabled: user != null
+            ? _parsePasswordAuthEnabled(
+                user['password_auth_enabled'],
+                current.passwordAuthEnabled,
+              )
+            : current.passwordAuthEnabled,
+      );
+      final prefs = await SharedPreferences.getInstance();
+      await _persistUserFields(prefs, updated);
+      state = AsyncData(updated);
+      return null;
+    } on DioException catch (e) {
+      return formatApiError(e);
+    } catch (e) {
+      return e.toString();
+    }
+  }
+
+  /// Refreshes the session from the dashboard endpoint.
+  Future<void> refreshSession() async {
+    final current = state.valueOrNull;
+    if (current == null) {
+      return;
+    }
+
+    try {
+      final data = await _api.dashboard(token: current.token);
+      final user = data['user'] as Map<String, dynamic>?;
+      if (user == null) {
+        return;
+      }
+
+      final updated = current.copyWith(
+        name: user['name'] as String? ?? current.name,
+        email: user['email'] as String? ?? current.email,
+        passwordAuthEnabled: _parsePasswordAuthEnabled(
+          user['password_auth_enabled'],
+          current.passwordAuthEnabled,
+        ),
+      );
+      final prefs = await SharedPreferences.getInstance();
+      await _persistUserFields(prefs, updated);
+      state = AsyncData(updated);
+    } on DioException catch (e) {
+      if (e.response?.statusCode == 401) {
+        final prefs = await SharedPreferences.getInstance();
+        await _clearPrefs(prefs);
+        state = const AsyncData(null);
+      }
+    }
+  }
+
+  /// Returns `null` on success, or a user-facing error message.
+  Future<String?> changePassword({
+    required String currentPassword,
+    required String password,
+    required String passwordConfirmation,
+  }) async {
+    final current = state.valueOrNull;
+    if (current == null) {
+      return 'Not signed in.';
+    }
+
+    try {
+      await _api.updatePassword(
+        token: current.token,
+        currentPassword: currentPassword,
+        password: password,
+        passwordConfirmation: passwordConfirmation,
+      );
+      return null;
+    } on DioException catch (e) {
+      return formatApiError(e);
+    } catch (e) {
+      return e.toString();
+    }
+  }
+
   Future<void> logout() async {
     final current = state.valueOrNull;
     if (current != null) {
@@ -184,6 +284,10 @@ class SessionNotifier extends AsyncNotifier<UserSession?> {
       token: token,
       name: user['name'] as String? ?? '',
       email: user['email'] as String? ?? '',
+      passwordAuthEnabled: _parsePasswordAuthEnabled(
+        user['password_auth_enabled'],
+        null,
+      ),
     );
 
     final prefs = await SharedPreferences.getInstance();
@@ -210,11 +314,32 @@ class SessionNotifier extends AsyncNotifier<UserSession?> {
   ) async {
     await prefs.setString(_nameKey, session.name);
     await prefs.setString(_emailKey, session.email);
+    await prefs.setBool(_passwordAuthEnabledKey, session.passwordAuthEnabled);
+  }
+
+  bool _parsePasswordAuthEnabled(Object? apiValue, bool? cached) {
+    if (apiValue is bool) {
+      return apiValue;
+    }
+    if (apiValue is int) {
+      return apiValue != 0;
+    }
+    if (apiValue is String) {
+      final normalized = apiValue.toLowerCase();
+      if (normalized == 'true' || normalized == '1') {
+        return true;
+      }
+      if (normalized == 'false' || normalized == '0') {
+        return false;
+      }
+    }
+    return cached ?? true;
   }
 
   Future<void> _clearPrefs(SharedPreferences prefs) async {
     await prefs.remove(_tokenKey);
     await prefs.remove(_nameKey);
     await prefs.remove(_emailKey);
+    await prefs.remove(_passwordAuthEnabledKey);
   }
 }

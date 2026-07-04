@@ -5,11 +5,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
+import '../account/presentation/account_screen.dart';
 import '../budget/presentation/budgets_screen.dart';
 import 'application/dashboard_expense_summary_provider.dart';
 import 'domain/expense_week.dart';
 import '../expenses/presentation/expenses_screen.dart';
-import 'presentation/sign_out_menu_button.dart';
 
 /// Ceiling for bar chart axis only (not data).
 double _niceChartCeiling(double dataMax, {double headroom = 1.08}) {
@@ -81,12 +81,12 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
         appBar: AppBar(
           scrolledUnderElevation: 0,
           surfaceTintColor: Colors.transparent,
-          actions: const [SignOutMenuButton()],
         ),
         body: const _DashboardHome(),
       ),
       1 => const BudgetsScreen(),
       2 => const ExpensesScreen(),
+      3 => const AccountScreen(),
       _ => const SizedBox.shrink(),
     };
   }
@@ -118,6 +118,11 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
               icon: Icon(Icons.receipt_long_outlined),
               selectedIcon: Icon(Icons.receipt_long),
               label: 'Expenses',
+            ),
+            NavigationDestination(
+              icon: Icon(Icons.person_outlined),
+              selectedIcon: Icon(Icons.person),
+              label: 'Account',
             ),
           ],
         ),
@@ -208,6 +213,11 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                               icon: Icon(Icons.receipt_long_outlined),
                               selectedIcon: Icon(Icons.receipt_long),
                               label: Text('Expenses'),
+                            ),
+                            NavigationRailDestination(
+                              icon: Icon(Icons.person_outlined),
+                              selectedIcon: Icon(Icons.person),
+                              label: Text('Account'),
                             ),
                           ],
                         ),

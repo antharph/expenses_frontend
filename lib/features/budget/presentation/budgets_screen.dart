@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
 import '../../../core/errors/api_errors.dart';
-import '../../dashboard/presentation/sign_out_menu_button.dart';
 import '../application/budget_providers.dart';
 import '../domain/budget_progress.dart';
 import 'budget_history_screen.dart';
@@ -43,7 +42,6 @@ class BudgetsScreen extends ConsumerWidget {
         title: const Text('Budgets'),
         scrolledUnderElevation: 0,
         surfaceTintColor: Colors.transparent,
-        actions: const [SignOutMenuButton()],
       ),
       floatingActionButton: budgetsAsync.maybeWhen(
         data: (budgets) => budgets.isEmpty

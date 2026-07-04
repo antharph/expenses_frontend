@@ -4,7 +4,6 @@ import 'package:flutter_slidable/flutter_slidable.dart';
 import 'package:intl/intl.dart';
 
 import '../../dashboard/application/dashboard_expense_summary_provider.dart';
-import '../../dashboard/presentation/sign_out_menu_button.dart';
 import '../application/categories_provider.dart';
 import '../application/expenses_list_notifier.dart';
 import '../domain/expense.dart';
@@ -110,7 +109,6 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen> {
         title: const Text('Expenses'),
         scrolledUnderElevation: 0,
         surfaceTintColor: Colors.transparent,
-        actions: const [SignOutMenuButton()],
       ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () {
