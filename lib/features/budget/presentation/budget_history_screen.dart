@@ -272,7 +272,9 @@ class _BudgetHistoryScreenState extends ConsumerState<BudgetHistoryScreen> {
 
               final sorted = _sortedLogs(logs);
               final current = sorted.first;
-              final past = sorted.skip(1).toList();
+              final previous = sorted.length > 1 ? sorted[1] : null;
+              final older =
+                  sorted.length > 2 ? sorted.sublist(2) : const <BudgetLogEntry>[];
 
               return RefreshIndicator(
                 onRefresh: _refreshLogs,
@@ -285,20 +287,30 @@ class _BudgetHistoryScreenState extends ConsumerState<BudgetHistoryScreen> {
                     MediaQuery.paddingOf(context).bottom + 24,
                   ),
                   children: [
-                    _CurrentPeriodCard(
+                    _PeriodSummaryCard(
+                      sectionLabel: 'Current period',
                       periodLabel: _periodLabel(current),
                       entry: current,
                       formatAmount: _currency.format,
                     ),
-                    if (past.isNotEmpty) ...[
+                    if (previous != null) ...[
                       const SizedBox(height: 28),
-                      _SectionHeader(label: 'Past periods'),
+                      _PeriodSummaryCard(
+                        sectionLabel: 'Previous period',
+                        periodLabel: _periodLabel(previous),
+                        entry: previous,
+                        formatAmount: _currency.format,
+                      ),
+                    ],
+                    if (older.isNotEmpty) ...[
+                      const SizedBox(height: 28),
+                      _SectionHeader(label: 'Older periods'),
                       const SizedBox(height: 12),
-                      for (var i = 0; i < past.length; i++) ...[
+                      for (var i = 0; i < older.length; i++) ...[
                         if (i > 0) const SizedBox(height: 8),
                         _PastPeriodRow(
-                          periodLabel: _periodLabel(past[i]),
-                          entry: past[i],
+                          periodLabel: _periodLabel(older[i]),
+                          entry: older[i],
                           formatAmount: _currency.format,
                         ),
                       ],
@@ -361,14 +373,16 @@ class _BudgetHistoryScreenState extends ConsumerState<BudgetHistoryScreen> {
   }
 }
 
-/// Hero card for the active or most recent pay period.
-class _CurrentPeriodCard extends StatelessWidget {
-  const _CurrentPeriodCard({
+/// Hero card for a budget period summary (current or previous).
+class _PeriodSummaryCard extends StatelessWidget {
+  const _PeriodSummaryCard({
+    required this.sectionLabel,
     required this.periodLabel,
     required this.entry,
     required this.formatAmount,
   });
 
+  final String sectionLabel;
   final String periodLabel;
   final BudgetLogEntry entry;
   final String Function(num) formatAmount;
@@ -398,7 +412,7 @@ class _CurrentPeriodCard extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Current period',
+              sectionLabel,
               style: theme.textTheme.labelLarge?.copyWith(
                 color: scheme.onSurfaceVariant,
                 letterSpacing: 0.2,
