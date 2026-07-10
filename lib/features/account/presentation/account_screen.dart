@@ -3,10 +3,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../auth/application/session_notifier.dart';
 import 'change_password_sheet.dart';
+import 'delete_account_action.dart';
 import 'edit_name_sheet.dart';
 import 'sign_out_action.dart';
 
 const double _kAccountContentGutter = 20;
+
+enum _AccountMenuAction { deleteAccount }
 
 class AccountScreen extends ConsumerStatefulWidget {
   const AccountScreen({super.key});
@@ -47,6 +50,7 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
   @override
   Widget build(BuildContext context) {
     final sessionAsync = ref.watch(sessionProvider);
+    final session = sessionAsync.valueOrNull;
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
 
@@ -55,6 +59,31 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
         title: const Text('Account'),
         scrolledUnderElevation: 0,
         surfaceTintColor: Colors.transparent,
+        actions: [
+          if (session != null)
+            PopupMenuButton<_AccountMenuAction>(
+              icon: const Icon(Icons.more_vert),
+              tooltip: 'Account options',
+              onSelected: (action) {
+                if (action == _AccountMenuAction.deleteAccount) {
+                  confirmAndDeleteAccount(
+                    context,
+                    ref,
+                    passwordAuthEnabled: session.passwordAuthEnabled,
+                  );
+                }
+              },
+              itemBuilder: (context) => [
+                PopupMenuItem<_AccountMenuAction>(
+                  value: _AccountMenuAction.deleteAccount,
+                  child: Text(
+                    'Delete account',
+                    style: TextStyle(color: scheme.error),
+                  ),
+                ),
+              ],
+            ),
+        ],
       ),
       body: sessionAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),

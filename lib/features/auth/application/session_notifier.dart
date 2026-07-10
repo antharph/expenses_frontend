@@ -345,6 +345,28 @@ class SessionNotifier extends AsyncNotifier<UserSession?> {
     state = const AsyncData(null);
   }
 
+  /// Returns `null` on success, or a user-facing error message.
+  Future<String?> deleteAccount({String? password}) async {
+    final current = state.valueOrNull;
+    if (current == null) {
+      return 'Not signed in.';
+    }
+
+    try {
+      await _api.deleteAccount(
+        token: current.token,
+        password: password,
+      );
+    } on DioException catch (e) {
+      return formatApiError(e);
+    } catch (e) {
+      return e.toString();
+    }
+
+    await logout();
+    return null;
+  }
+
   Future<UserSession> _sessionFromAuthResponse(
     Map<String, dynamic> data,
   ) async {

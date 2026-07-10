@@ -138,4 +138,15 @@ class AuthApi {
       },
     );
   }
+
+  Future<void> deleteAccount({
+    required String token,
+    String? password,
+  }) async {
+    final client = _client(token);
+    await client.delete<void>(
+      '/api/v1/user/account',
+      data: password != null ? {'password': password} : null,
+    );
+  }
 }
