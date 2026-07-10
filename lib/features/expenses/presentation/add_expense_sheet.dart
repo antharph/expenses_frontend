@@ -47,10 +47,14 @@ class _AddExpenseSheetState extends ConsumerState<AddExpenseSheet> {
   static const int _receiptImageQuality = 82;
 
   final _formKey = GlobalKey<FormState>();
+  final _scrollController = ScrollController();
   final _itemController = TextEditingController();
   final _quantityController = TextEditingController(text: '1');
   final _priceController = TextEditingController();
   final _totalController = TextEditingController(text: '0.00');
+  final _itemFocusNode = FocusNode();
+  final _quantityFocusNode = FocusNode();
+  final _priceFocusNode = FocusNode();
   _ExpenseEntryMode _entryMode = _ExpenseEntryMode.receipt;
   XFile? _receipt;
   int? _selectedCategoryId;
@@ -64,6 +68,9 @@ class _AddExpenseSheetState extends ConsumerState<AddExpenseSheet> {
     super.initState();
     _priceController.addListener(_syncTotal);
     _quantityController.addListener(_syncTotal);
+    for (final node in [_itemFocusNode, _quantityFocusNode, _priceFocusNode]) {
+      node.addListener(() => _ensureFocusedFieldVisible(node));
+    }
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final categories = ref.read(expenseCategoriesProvider).valueOrNull;
       if (categories != null) {
@@ -72,14 +79,38 @@ class _AddExpenseSheetState extends ConsumerState<AddExpenseSheet> {
     });
   }
 
+  void _ensureFocusedFieldVisible(FocusNode node) {
+    if (!node.hasFocus) {
+      return;
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!node.hasFocus || !mounted) {
+        return;
+      }
+      final fieldContext = node.context;
+      if (fieldContext != null) {
+        Scrollable.ensureVisible(
+          fieldContext,
+          alignment: 0.15,
+          duration: const Duration(milliseconds: 200),
+          curve: Curves.easeInOut,
+        );
+      }
+    });
+  }
+
   @override
   void dispose() {
     _priceController.removeListener(_syncTotal);
     _quantityController.removeListener(_syncTotal);
+    _scrollController.dispose();
     _itemController.dispose();
     _quantityController.dispose();
     _priceController.dispose();
     _totalController.dispose();
+    _itemFocusNode.dispose();
+    _quantityFocusNode.dispose();
+    _priceFocusNode.dispose();
     super.dispose();
   }
 
@@ -284,17 +315,20 @@ class _AddExpenseSheetState extends ConsumerState<AddExpenseSheet> {
     final showCategoryError =
         _categoryTouched && resolvedCategoryId == null && !categoriesAsync.isLoading;
 
-    return PopScope(
-      canPop: !_saving,
-      child: SingleChildScrollView(
-        keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-        padding: EdgeInsets.fromLTRB(20, 4, 20, bottomInset + safeBottom + 20),
-        child: Form(
-          key: _formKey,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
+    return Padding(
+      padding: EdgeInsets.only(bottom: bottomInset),
+      child: PopScope(
+        canPop: !_saving,
+        child: SingleChildScrollView(
+          controller: _scrollController,
+          keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+          padding: EdgeInsets.fromLTRB(20, 4, 20, safeBottom + 20),
+          child: Form(
+            key: _formKey,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -398,6 +432,9 @@ class _AddExpenseSheetState extends ConsumerState<AddExpenseSheet> {
                 quantityController: _quantityController,
                 priceController: _priceController,
                 totalController: _totalController,
+                itemFocusNode: _itemFocusNode,
+                quantityFocusNode: _quantityFocusNode,
+                priceFocusNode: _priceFocusNode,
               ),
             if (_error != null) ...[
               const SizedBox(height: 16),
@@ -439,9 +476,10 @@ class _AddExpenseSheetState extends ConsumerState<AddExpenseSheet> {
               ),
               child: const Text('Cancel'),
             ),
-          ],
+              ],
+            ),
+          ),
         ),
-      ),
       ),
     );
   }
@@ -830,16 +868,25 @@ class _ManualEntryFields extends StatelessWidget {
     required this.quantityController,
     required this.priceController,
     required this.totalController,
+    required this.itemFocusNode,
+    required this.quantityFocusNode,
+    required this.priceFocusNode,
   });
 
   final TextEditingController itemController;
   final TextEditingController quantityController;
   final TextEditingController priceController;
   final TextEditingController totalController;
+  final FocusNode itemFocusNode;
+  final FocusNode quantityFocusNode;
+  final FocusNode priceFocusNode;
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final scrollPadding = EdgeInsets.only(
+      bottom: MediaQuery.viewInsetsOf(context).bottom + 120,
+    );
 
     return Material(
       color: scheme.surfaceContainerLow.withValues(alpha: 0.5),
@@ -851,6 +898,8 @@ class _ManualEntryFields extends StatelessWidget {
           children: [
             TextFormField(
               controller: itemController,
+              focusNode: itemFocusNode,
+              scrollPadding: scrollPadding,
               textInputAction: TextInputAction.next,
               textCapitalization: TextCapitalization.sentences,
               decoration: _manualFieldDecoration(
@@ -872,6 +921,8 @@ class _ManualEntryFields extends StatelessWidget {
                 Expanded(
                   child: TextFormField(
                     controller: quantityController,
+                    focusNode: quantityFocusNode,
+                    scrollPadding: scrollPadding,
                     keyboardType: TextInputType.number,
                     inputFormatters: [
                       FilteringTextInputFormatter.digitsOnly,
@@ -897,6 +948,8 @@ class _ManualEntryFields extends StatelessWidget {
                   flex: 2,
                   child: TextFormField(
                     controller: priceController,
+                    focusNode: priceFocusNode,
+                    scrollPadding: scrollPadding,
                     keyboardType: const TextInputType.numberWithOptions(
                       decimal: true,
                     ),

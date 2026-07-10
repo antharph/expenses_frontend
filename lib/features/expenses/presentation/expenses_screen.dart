@@ -115,6 +115,7 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen> {
           showModalBottomSheet<void>(
             context: context,
             isScrollControlled: true,
+            useSafeArea: true,
             showDragHandle: true,
             builder: (context) => const AddExpenseSheet(),
           );
