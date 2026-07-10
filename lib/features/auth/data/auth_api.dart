@@ -68,6 +68,23 @@ class AuthApi {
     return response.data ?? <String, dynamic>{};
   }
 
+  Future<Map<String, dynamic>> loginWithApple({
+    required String idToken,
+    required String timezone,
+    String? name,
+  }) async {
+    final client = _client(null);
+    final response = await client.post<Map<String, dynamic>>(
+      '/api/v1/auth/apple',
+      data: {
+        'id_token': idToken,
+        'timezone': timezone,
+        if (name != null && name.isNotEmpty) 'name': name,
+      },
+    );
+    return response.data ?? <String, dynamic>{};
+  }
+
   Future<Map<String, dynamic>> loginWithGoogle({
     required String idToken,
     required String timezone,

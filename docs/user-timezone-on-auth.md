@@ -28,7 +28,8 @@ Backend contract details: `expenses` repo → `docs/api/authentication.md`.
 | Flow | HTTP | Path | Sends `timezone`? | Backend behavior |
 | --- | --- | --- | --- | --- |
 | Email registration | `POST` | `/register` | **Yes** | Set on create (defaults to `UTC` if omitted) |
-| Google sign-in | `POST` | `/auth/google` | **Yes** | Set on create; **updated** on later sign-ins when sent |
+| Firebase social sign-in (Google) | `POST` | `/auth/firebase` | **Yes** | Set on create; **updated** on later sign-ins when sent |
+| Apple sign-in (iOS + Android) | `POST` | `/auth/apple` | **Yes** | Set on create; **updated** on later sign-ins when sent |
 | Email / password login | `POST` | `/login` | **Yes** | **Updated** on sign-in when sent |
 | Session restore | `GET` | `/dashboard` | **No** | Read-only; no timezone in body |
 | Logout | `POST` | `/logout` | **No** | N/A |
@@ -37,7 +38,7 @@ Backend contract details: `expenses` repo → `docs/api/authentication.md`.
 
 | Field | Type | Required | Example |
 | --- | --- | --- | --- |
-| `timezone` | string | Optional on API; **required from this app** on register, login, and Google sign-in | `Asia/Manila` |
+| `timezone` | string | Optional on API; **required from this app** on register, login, and social sign-in | `Asia/Manila` |
 
 Validation on the API: IANA identifier, max 255 characters. Invalid values fall back to `UTC` server-side.
 
@@ -58,8 +59,15 @@ Validation on the API: IANA identifier, max 255 characters. Invalid values fall 
 #### 3. Google sign-in
 
 - **UI:** `lib/features/auth/presentation/login_screen.dart` → `SessionNotifier.loginWithGoogle`
-- **API client:** `AuthApi.loginWithGoogle` → `POST /api/v1/auth/google`
+- **API client:** `AuthApi.loginWithFirebase` → `POST /api/v1/auth/firebase`
 - **JSON body includes:** `id_token` (Firebase JWT), **`timezone`**
+
+#### 4. Apple sign-in (iOS + Android)
+
+- **UI:** `lib/features/auth/presentation/login_screen.dart` → `SessionNotifier.loginWithApple`
+- **API client:** `AuthApi.loginWithApple` → `POST /api/v1/auth/apple`
+- **JSON body includes:** `id_token` (Apple JWT, not Firebase), **`timezone`**, optional **`name`** on first sign-in
+- **Setup:** see `docs/sign-in-with-apple-setup.md`. Apple does **not** use Firebase Auth in this app.
 
 ---
 
@@ -74,7 +82,7 @@ When you add any new way to register or sign in (Apple, magic link, another OAut
 5. **Tests:** extend `test/features/auth/auth_api_timezone_test.dart` (or equivalent) so the new method’s request body includes `timezone`.
 6. **Native plugins:** if a new package needs iOS pods, run `pod install` and document any rebuild requirement here.
 
-All current sign-in paths (email/password, Google) refresh `users.timezone` when the client sends `timezone`.
+All current sign-in paths (email/password, Google, Apple) refresh `users.timezone` when the client sends `timezone`.
 
 ---
 

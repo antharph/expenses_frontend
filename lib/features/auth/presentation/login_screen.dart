@@ -18,9 +18,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   final _password = TextEditingController();
   String? _authError;
   bool _submittingEmail = false;
+  bool _submittingApple = false;
   bool _submittingGoogle = false;
 
-  bool get _busy => _submittingEmail || _submittingGoogle;
+  bool get _busy => _submittingEmail || _submittingApple || _submittingGoogle;
 
   @override
   void dispose() {
@@ -52,6 +53,27 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     } finally {
       if (mounted) {
         setState(() => _submittingEmail = false);
+      }
+    }
+  }
+
+  Future<void> _submitApple() async {
+    FocusScope.of(context).unfocus();
+    setState(() {
+      _authError = null;
+      _submittingApple = true;
+    });
+    try {
+      final message = await ref.read(sessionProvider.notifier).loginWithApple();
+      if (!mounted) {
+        return;
+      }
+      if (message != null) {
+        setState(() => _authError = message);
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _submittingApple = false);
       }
     }
   }
@@ -156,6 +178,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   const SizedBox(height: 20),
                   const AuthOrDivider(),
                   const SizedBox(height: 20),
+                  AppleSignInButton(
+                    onPressed: _busy ? null : _submitApple,
+                    loading: _submittingApple,
+                  ),
+                  const SizedBox(height: 12),
                   GoogleSignInButton(
                     onPressed: _busy ? null : _submitGoogle,
                     loading: _submittingGoogle,

@@ -13,7 +13,7 @@
 	<key>PLIST_VERSION</key>
 	<string>1</string>
 	<key>BUNDLE_ID</key>
-	<string>com.example.expensesFrontend</string>
+	<string>com.maiexpenses.app</string>
 	<key>PROJECT_ID</key>
 	<string>personal-app-a61a2</string>
 	<key>STORAGE_BUCKET</key>

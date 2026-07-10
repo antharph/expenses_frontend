@@ -64,6 +64,6 @@ class DefaultFirebaseOptions {
     projectId: 'personal-app-a61a2',
     storageBucket: 'personal-app-a61a2.firebasestorage.app',
     iosClientId: '498404513306-1gdr45qnuu7a8q3v83amevi2u7ohberm.apps.googleusercontent.com',
-    iosBundleId: 'com.example.expensesFrontend',
+    iosBundleId: 'com.maiexpenses.app',
   );
 }

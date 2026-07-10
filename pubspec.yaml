@@ -2,7 +2,7 @@ name: expenses_frontend
 description: "A new Flutter project."
 publish_to: 'none'
 
-version: 1.0.0+10
+version: 1.0.0+11
 
 environment:
   sdk: ^3.11.1
@@ -18,6 +18,7 @@ dependencies:
   flutter_riverpod: ^2.6.1
   flutter_timezone: ^4.1.0
   google_sign_in: ^6.3.0
+  sign_in_with_apple: ^6.1.4
   image_picker: ^1.1.2
   intl: ^0.20.2
   shared_preferences: ^2.5.3

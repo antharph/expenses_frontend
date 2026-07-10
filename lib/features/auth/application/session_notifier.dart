@@ -3,6 +3,11 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:sign_in_with_apple/sign_in_with_apple.dart';
+
+import 'dart:io' show Platform;
+
+import '../../../core/config/apple_auth_config.dart';
 
 import '../../../core/errors/api_errors.dart';
 import '../../../core/timezone/device_timezone.dart';
@@ -110,6 +115,57 @@ class SessionNotifier extends AsyncNotifier<UserSession?> {
       await _syncBudgetCycles(session);
       state = AsyncData(session);
       return null;
+    } on DioException catch (e) {
+      state = const AsyncData(null);
+      return formatApiError(e);
+    } catch (e) {
+      state = const AsyncData(null);
+      return e.toString();
+    }
+  }
+
+  /// Returns `null` on success, or a user-facing error message.
+  Future<String?> loginWithApple() async {
+    try {
+      final appleCredential = await SignInWithApple.getAppleIDCredential(
+        scopes: [
+          AppleIDAuthorizationScopes.email,
+          AppleIDAuthorizationScopes.fullName,
+        ],
+        webAuthenticationOptions: Platform.isAndroid
+            ? WebAuthenticationOptions(
+                clientId: AppleAuthConfig.servicesId,
+                redirectUri: Uri.parse(AppleAuthConfig.redirectUri),
+              )
+            : null,
+      );
+
+      final idToken = appleCredential.identityToken;
+      if (idToken == null || idToken.isEmpty) {
+        state = const AsyncData(null);
+        return 'Unable to read Apple identity token.';
+      }
+
+      final givenName = appleCredential.givenName?.trim() ?? '';
+      final familyName = appleCredential.familyName?.trim() ?? '';
+      final displayName = '$givenName $familyName'.trim();
+
+      final timezone = await deviceTimezone();
+      final data = await _api.loginWithApple(
+        idToken: idToken,
+        timezone: timezone,
+        name: displayName.isEmpty ? null : displayName,
+      );
+      final session = await _sessionFromAuthResponse(data);
+      await _syncBudgetCycles(session);
+      state = AsyncData(session);
+      return null;
+    } on SignInWithAppleAuthorizationException catch (e) {
+      state = const AsyncData(null);
+      if (e.code == AuthorizationErrorCode.canceled) {
+        return 'Apple sign-in was cancelled.';
+      }
+      return e.message;
     } on DioException catch (e) {
       state = const AsyncData(null);
       return formatApiError(e);

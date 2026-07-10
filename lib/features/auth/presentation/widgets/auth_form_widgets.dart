@@ -1,4 +1,7 @@
+import 'dart:io' show Platform;
+
 import 'package:flutter/material.dart';
+import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 
 /// Shared layout and field styling for sign-in and registration screens.
 ///
@@ -242,6 +245,80 @@ class AuthOrDivider extends StatelessWidget {
         ),
         Expanded(child: Divider(color: scheme.outlineVariant)),
       ],
+    );
+  }
+}
+
+class AppleSignInButton extends StatelessWidget {
+  const AppleSignInButton({
+    super.key,
+    required this.onPressed,
+    required this.loading,
+  });
+
+  final VoidCallback? onPressed;
+  final bool loading;
+
+  @override
+  Widget build(BuildContext context) {
+    final style = Theme.of(context).brightness == Brightness.dark
+        ? SignInWithAppleButtonStyle.white
+        : SignInWithAppleButtonStyle.black;
+
+    if (loading) {
+      final scheme = Theme.of(context).colorScheme;
+      return SizedBox(
+        height: 48,
+        child: Center(
+          child: SizedBox(
+            width: 22,
+            height: 22,
+            child: CircularProgressIndicator(
+              strokeWidth: 2,
+              color: scheme.primary,
+            ),
+          ),
+        ),
+      );
+    }
+
+    if (Platform.isIOS) {
+      return IgnorePointer(
+        ignoring: onPressed == null,
+        child: Opacity(
+          opacity: onPressed == null ? 0.5 : 1,
+          child: SignInWithAppleButton(
+            onPressed: onPressed ?? () {},
+            style: style,
+            height: 48,
+            borderRadius: BorderRadius.circular(12),
+          ),
+        ),
+      );
+    }
+
+    final scheme = Theme.of(context).colorScheme;
+    return OutlinedButton(
+      onPressed: onPressed,
+      style: OutlinedButton.styleFrom(
+        minimumSize: const Size.fromHeight(48),
+        side: BorderSide(color: scheme.outlineVariant),
+        backgroundColor: scheme.surface,
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.apple, color: scheme.onSurface, size: 22),
+          const SizedBox(width: 10),
+          Text(
+            'Continue with Apple',
+            style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                  color: scheme.onSurface,
+                  fontWeight: FontWeight.w600,
+                ),
+          ),
+        ],
+      ),
     );
   }
 }
