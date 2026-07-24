@@ -1,9 +1,7 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.INTERNET" />
-    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
-    <uses-permission
-        android:name="android.permission.READ_EXTERNAL_STORAGE"
-        android:maxSdkVersion="32" />
+    <!-- Receipt attach uses the system photo picker via image_picker; do not
+         declare READ_MEDIA_IMAGES / READ_EXTERNAL_STORAGE (Play photo policy). -->
     <application
         android:label="MaiExpenses"
         android:name="${applicationName}"
