@@ -71,6 +71,10 @@ Build for TestFlight
 2. flutter build ipa  --dart-define-from-file=.config/config_prod.json
 3. Open Transportor and upload build/ios/ipa/MaiExpenses.ipa
 
+Build for Google Play
+1. Increment version in `pubspec.yaml` (e.g. `1.0.0+15` → `1.0.0+16`)
+2. `fvm flutter build appbundle --release --dart-define-from-file=.config/config_prod.json`
+3. Upload `build/app/outputs/bundle/release/app-release.aab` in Play Console
 
 ---
 
